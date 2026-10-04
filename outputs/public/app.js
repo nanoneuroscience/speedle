@@ -485,7 +485,7 @@ function render() {
     const value = Number(slider.value);
     localGuess = value;
     const readout = view.querySelector('#slider-value');
-    if (readout) readout.textContent = `${value} ${unitLabel()}`;
+    if (readout) readout.textContent = String(value);
     const laneReadout = view.querySelector('#lane-guess-value');
     if (laneReadout) laneReadout.textContent = `${value} ${unitLabel()}`;
     guessRunnerRate = speedToRunnerRate(value, Number(slider.max));
