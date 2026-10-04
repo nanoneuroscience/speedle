@@ -248,20 +248,24 @@ function publish(room) {
   const payload = `data: ${JSON.stringify(safeRoom(room))}\n\n`;
   for (const response of streams.get(room.code) || []) response.write(payload);
 }
-function resolveRound(room, timedOut = false) {
+function resolveRound(room) {
   if (room.phase !== 'guessing') return;
   room.phase = 'reveal';
   room.deadline = null;
   for (const p of room.players.values()) {
     if (p.health <= 0) continue;
-    if (p.guess == null && timedOut) p.damage = 100;
+    if (p.guess == null) p.damage = 100;
     else if (p.guess != null) p.damage = Math.min(100, Math.round(100 * Math.abs(p.guess - room.current.speed) / room.current.range));
-    else p.damage = null;
     if (p.damage != null) p.health = Math.max(0, p.health - p.damage);
   }
   const alive = [...room.players.values()].filter(p => p.health > 0);
   if (alive.length === 1) { room.phase = 'finished'; room.winner = alive[0]; }
   publish(room);
+}
+function resolveExpiredRound(room) {
+  if (room.phase === 'guessing' && room.deadline != null && room.deadline <= Date.now()) {
+    resolveRound(room);
+  }
 }
 function beginRound(room) {
   const options = deck.filter(q => !room.usedQuestionNames.has(q.name));
@@ -283,6 +287,7 @@ const server = http.createServer(async (req, res) => {
     const code = (url.searchParams.get('room') || '').toUpperCase();
     const room = rooms.get(code);
     if (!room) return send(res, 404, { error: 'Room not found.' });
+    resolveExpiredRound(room);
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive', 'access-control-allow-origin': '*' });
     res.write(`data: ${JSON.stringify(safeRoom(room))}\n\n`);
     if (!streams.has(code)) streams.set(code, new Set());
@@ -357,6 +362,7 @@ const server = http.createServer(async (req, res) => {
     const code = String(data.code || '').toUpperCase();
     const room = rooms.get(code);
     if (!room) return send(res, 404, { error: 'That room code was not found.' });
+    resolveExpiredRound(room);
     if (action === 'join') {
       const name = String(data.name || '').trim().slice(0, 18);
       if (!name) return send(res, 400, { error: 'Enter a name to join.' });
@@ -431,7 +437,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 setInterval(() => {
-  for (const room of rooms.values()) if (room.phase === 'guessing' && room.deadline <= Date.now()) resolveRound(room, true);
+  for (const room of rooms.values()) resolveExpiredRound(room);
 }, 500);
 
 server.listen(PORT, '0.0.0.0', () => {
