@@ -351,7 +351,7 @@ const server = http.createServer(async (req, res) => {
       if (!name) return send(res, 400, { error: 'Enter a name to create a room.' });
       let code; do { code = roomCode(); } while (rooms.has(code));
       const id = randomUUID();
-      const room = { code, hostId: id, players: new Map([[id, { id, name, health: 500, connected: true, guess: null, damage: null }]]), phase: 'lobby', round: 0, startingHealth: 500, roundLimit: 30, unitSystem: 'imperial', deadline: null, current: null, usedQuestionNames: new Set(), winner: null };
+      const room = { code, hostId: id, players: new Map([[id, { id, name, health: 200, connected: true, guess: null, damage: null }]]), phase: 'lobby', round: 0, startingHealth: 200, roundLimit: 30, unitSystem: 'imperial', deadline: null, current: null, usedQuestionNames: new Set(), winner: null };
       rooms.set(code, room); return send(res, 200, { playerId: id, room: safeRoom(room) });
     }
     const code = String(data.code || '').toUpperCase();
@@ -381,7 +381,7 @@ const server = http.createServer(async (req, res) => {
       const startingHealth = Number(data.startingHealth);
       const roundLimit = Number(data.roundLimit);
       const unitSystem = String(data.unitSystem || '');
-      if (![100, 300, 500].includes(startingHealth)) return send(res, 400, { error: 'Choose 100, 300, or 500 starting HP.' });
+      if (![100, 200, 300].includes(startingHealth)) return send(res, 400, { error: 'Choose 100, 200, or 300 starting HP.' });
       if (![15, 30, 45].includes(roundLimit)) return send(res, 400, { error: 'Choose a guess timer from the available options.' });
       if (!['imperial', 'metric'].includes(unitSystem)) return send(res, 400, { error: 'Choose Imperial or Metric units.' });
       room.startingHealth = startingHealth;

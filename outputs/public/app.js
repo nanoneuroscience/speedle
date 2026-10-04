@@ -344,7 +344,7 @@ function createLanding() {
 }
 function healthList(players) {
   const heartPath = 'M50 88C46 84 8 60 8 34C8 18 19 8 34 8C42 8 48 12 50 20C52 12 58 8 66 8C81 8 92 18 92 34C92 60 54 84 50 88Z';
-  const maxHealth = state?.startingHealth || 500;
+  const maxHealth = state?.startingHealth || 200;
   return `<div class="health-list">${players.map(p => {
     const percent = Math.max(0, Math.min(100, p.health / maxHealth * 100));
     const healthRatio = Math.max(0, Math.min(1, p.health / maxHealth));
@@ -361,7 +361,7 @@ function healthList(players) {
   }).join('')}</div>`;
 }
 function lobbySettings() {
-  const healthOptions = [[100, 'Short game'], [300, 'Medium game'], [500, 'Long game']];
+  const healthOptions = [[100, 'Short game'], [200, 'Medium game'], [300, 'Long game']];
   const timeOptions = [[15, 'Fast'], [30, 'Standard'], [45, 'Relaxed']];
   const unitOptions = [['imperial', 'Imperial · MPH'], ['metric', 'Metric · KM/H']];
   return `<div class="room-settings"><div class="room-setting"><label class="field-label" for="setting-starting-health">STARTING HP</label>${isHost() ? `<select class="input lobby-setting-select" id="setting-starting-health" aria-label="Starting health">${healthOptions.map(([value, label]) => `<option value="${value}" ${value === state.startingHealth ? 'selected' : ''}>${value} HP · ${label}</option>`).join('')}</select>` : `<div class="setting-current">${state.startingHealth} HP · ${healthOptions.find(([value]) => value === state.startingHealth)?.[1] || 'Custom'}</div>`}</div><div class="room-setting"><label class="field-label" for="setting-round-limit">TIME PER GUESS</label>${isHost() ? `<select class="input lobby-setting-select" id="setting-round-limit" aria-label="Time per guess">${timeOptions.map(([value, label]) => `<option value="${value}" ${value === state.roundLimit ? 'selected' : ''}>${value} sec · ${label}</option>`).join('')}</select>` : `<div class="setting-current">${state.roundLimit} seconds</div>`}</div><div class="room-setting"><label class="field-label" for="setting-unit-system">SPEED UNITS</label>${isHost() ? `<select class="input lobby-setting-select" id="setting-unit-system" aria-label="Speed units">${unitOptions.map(([value, label]) => `<option value="${value}" ${value === (state.unitSystem || 'imperial') ? 'selected' : ''}>${label}</option>`).join('')}</select>` : `<div class="setting-current">${unitOptions.find(([value]) => value === state.unitSystem)?.[1] || 'Imperial · MPH'}</div>`}</div></div>`;
