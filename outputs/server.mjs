@@ -123,7 +123,34 @@ const deck = [
   { name: 'Personal watercraft', kind: 'OBJECT · WATERCRAFT', icon: '🛥️', speed: 67, range: 120, note: 'Many high-performance models are electronically limited near this speed.' },
   { name: 'Space Shuttle in orbit', kind: 'OBJECT · SPACECRAFT', icon: '🚀', speed: 17500, range: 25000, note: 'The shuttle traveled at orbital speed while circling Earth.' },
   { name: 'Parker Solar Probe', kind: 'OBJECT · SPACECRAFT', icon: '🛰️', speed: 430000, range: 500000, note: 'Near the Sun, NASA’s probe became the fastest human-made object.' },
+  // Slower wildlife and everyday mobility
+  { name: 'Virginia opossum (run)', kind: 'ANIMAL · MARSUPIAL', icon: '🦝', speed: 4, range: 100, note: 'A running opossum moves a little over 4 mph.' },
+  { name: 'North American beaver (swim)', kind: 'ANIMAL · AQUATIC MAMMAL', icon: '🦫', speed: 6, range: 100, note: 'A beaver can swim up to about 6 mph.' },
+  { name: 'Housefly (cruise)', kind: 'ANIMAL · INSECT', icon: '🪰', speed: 5, range: 100, note: 'A housefly cruises at roughly 4–5 mph.' },
+  { name: 'Eastern gray squirrel', kind: 'ANIMAL · SMALL MAMMAL', icon: '🐿️', speed: 15, range: 100, note: 'An eastern gray squirrel can run up to about 15 mph.' },
+  { name: 'Raccoon', kind: 'ANIMAL · SMALL MAMMAL', icon: '🦝', speed: 15, range: 100, note: 'Raccoons can reach about 15 mph despite their unhurried reputation.' },
+  { name: 'Worker honey bee (flight)', kind: 'ANIMAL · INSECT', icon: '🐝', speed: 18, range: 100, note: 'A worker honey bee can reach a top flight speed around 18 mph.' },
+  { name: 'Mountain goat (short burst)', kind: 'ANIMAL · MOUNTAIN', icon: '🐐', speed: 15, range: 100, note: 'Mountain goats can reach short-burst speeds of about 10–15 mph on steep terrain.' },
+  { name: 'Flying squirrel (glide)', kind: 'ANIMAL · GLIDING MAMMAL', icon: '🐿️', speed: 25, range: 100, note: 'Flying squirrels glide at roughly 20–30 mph; this is glide speed, not powered flight.' },
+  { name: 'John Deere X350 lawn tractor', kind: 'OBJECT · LAWN EQUIPMENT', icon: '🚜', speed: 6, range: 100, note: 'The X350 has a manufacturer-rated forward speed of 5.5 mph.' },
+  { name: 'Permobil F5 Corpus power wheelchair', kind: 'OBJECT · POWER MOBILITY', icon: '♿', speed: 8, range: 100, note: 'This model’s top speed is 7.5 mph.' },
+  { name: 'Pride Victory LX Sport scooter', kind: 'OBJECT · MOBILITY SCOOTER', icon: '🛵', speed: 8, range: 100, note: 'This mobility scooter has a maximum speed of 8 mph.' },
+  { name: 'Class 1 e-bike (assisted)', kind: 'OBJECT · E-BIKE', icon: '🚲', speed: 20, range: 100, note: 'Pedal assistance cuts off at 20 mph for a class 1 e-bike.' },
+  { name: 'Class 3 e-bike (assisted)', kind: 'OBJECT · E-BIKE', icon: '🚲', speed: 28, range: 100, note: 'Pedal assistance cuts off at 28 mph for a class 3 e-bike.' },
+  { name: 'Conventional golf cart', kind: 'OBJECT · GOLF CART', icon: '⛳', speed: 20, range: 100, note: 'A conventional golf cart has a maximum speed of 20 mph or lower.' },
+  { name: 'Neighborhood electric vehicle', kind: 'OBJECT · LOW-SPEED VEHICLE', icon: '🚙', speed: 25, range: 100, note: 'U.S. low-speed vehicle rules cap this class at 25 mph.' },
+  { name: 'Segway Ninebot Max G2 scooter', kind: 'OBJECT · ELECTRIC SCOOTER', icon: '🛴', speed: 22, range: 100, note: 'This model reaches 22 mph with the higher-speed mode enabled in its app.' },
 ];
+
+// Use shared slider ceilings so the scale gives only a broad speed band, not a
+// near-direct hint at the answer. The displayed range also remains the damage scale.
+for (const question of deck) {
+  question.range = question.speed <= 100 ? 100
+    : question.speed <= 500 ? 500
+      : question.speed <= 2000 ? 2000
+        : question.speed <= 30000 ? 30000
+          : 500000;
+}
 
 function roomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';

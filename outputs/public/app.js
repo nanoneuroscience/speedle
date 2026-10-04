@@ -381,9 +381,10 @@ function speedEnvironment(question) {
   const kind = question.kind.toLowerCase();
   if (kind.includes('spacecraft')) return 'space';
   if (['ocean', 'watercraft', 'sailboat', 'hydroplane'].some(term => kind.includes(term))) return 'ocean';
+  if (kind.includes('aquatic mammal')) return 'ocean';
   if (kind.includes('rail')) return 'rail';
-  if (['bird', 'aircraft', 'fighter jet'].some(term => kind.includes(term))) return 'sky';
-  if (['car', 'motorcycle', 'bicycle'].some(term => kind.includes(term))) return 'road';
+  if (['bird', 'aircraft', 'fighter jet', 'insect', 'gliding mammal'].some(term => kind.includes(term))) return 'sky';
+  if (['car', 'motorcycle', 'bicycle', 'e-bike', 'scooter', 'low-speed vehicle', 'power mobility', 'golf cart'].some(term => kind.includes(term))) return 'road';
   return 'field';
 }
 function environmentDetails(environment) {
