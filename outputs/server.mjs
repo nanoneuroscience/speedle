@@ -211,14 +211,16 @@ function resolveRound(room, timedOut = false) {
   publish(room);
 }
 function beginRound(room) {
-  const options = deck.filter(q => q.name !== room.previousQuestion);
+  const options = deck.filter(q => !room.usedQuestionNames.has(q.name));
+  if (!options.length) return false;
   room.current = options[Math.floor(Math.random() * options.length)];
-  room.previousQuestion = room.current.name;
+  room.usedQuestionNames.add(room.current.name);
   room.round += 1;
   room.phase = 'guessing';
   room.deadline = Date.now() + room.roundLimit * 1000;
   for (const p of room.players.values()) { p.guess = null; p.damage = null; }
   publish(room);
+  return true;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -296,7 +298,7 @@ const server = http.createServer(async (req, res) => {
       if (!name) return send(res, 400, { error: 'Enter a name to create a room.' });
       let code; do { code = roomCode(); } while (rooms.has(code));
       const id = randomUUID();
-      const room = { code, hostId: id, players: new Map([[id, { id, name, health: 500, connected: true, guess: null, damage: null }]]), phase: 'lobby', round: 0, startingHealth: 500, roundLimit: 30, unitSystem: 'imperial', deadline: null, current: null, previousQuestion: null, winner: null };
+      const room = { code, hostId: id, players: new Map([[id, { id, name, health: 500, connected: true, guess: null, damage: null }]]), phase: 'lobby', round: 0, startingHealth: 500, roundLimit: 30, unitSystem: 'imperial', deadline: null, current: null, usedQuestionNames: new Set(), winner: null };
       rooms.set(code, room); return send(res, 200, { playerId: id, room: safeRoom(room) });
     }
     const code = String(data.code || '').toUpperCase();
@@ -317,7 +319,8 @@ const server = http.createServer(async (req, res) => {
     if (action === 'start') {
       if (player.id !== room.hostId) return send(res, 403, { error: 'Only the host can start.' });
       if (room.phase !== 'lobby' || room.players.size < 2) return send(res, 409, { error: 'At least 2 players are needed to start.' });
-      beginRound(room); return send(res, 200, { room: safeRoom(room) });
+      if (!beginRound(room)) return send(res, 409, { error: 'All unique objects have been used in this game. Create a new room to play again.' });
+      return send(res, 200, { room: safeRoom(room) });
     }
     if (action === 'settings') {
       if (player.id !== room.hostId) return send(res, 403, { error: 'Only the host can change game settings.' });
@@ -347,7 +350,8 @@ const server = http.createServer(async (req, res) => {
     if (action === 'next') {
       if (player.id !== room.hostId) return send(res, 403, { error: 'Only the host can continue.' });
       if (room.phase !== 'reveal') return send(res, 409, { error: 'The round is still in progress.' });
-      beginRound(room); return send(res, 200, { room: safeRoom(room) });
+      if (!beginRound(room)) return send(res, 409, { error: 'All unique objects have been used in this game. Create a new room to play again.' });
+      return send(res, 200, { room: safeRoom(room) });
     }
     if (action === 'replay') {
       if (player.id !== room.hostId) return send(res, 403, { error: 'Only the host can start another game.' });
@@ -356,7 +360,7 @@ const server = http.createServer(async (req, res) => {
       room.round = 0;
       room.deadline = null;
       room.current = null;
-      room.previousQuestion = null;
+      room.usedQuestionNames = new Set();
       room.winner = null;
       for (const p of room.players.values()) { p.health = room.startingHealth; p.guess = null; p.damage = null; }
       publish(room); return send(res, 200, { room: safeRoom(room) });
