@@ -15,8 +15,7 @@ let dailyScoreStore = null;
 let dailyScoreStoreDay = null;
 let dailyScoreWrites = Promise.resolve();
 const lanAddress = Object.values(os.networkInterfaces()).flat().find(x => x && x.family === 'IPv4' && !x.internal)?.address || 'localhost';
-const configuredGameOrigin = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL;
-const gameOrigin = (configuredGameOrigin || `http://${lanAddress}:${PORT}`).replace(/\/+$/, '');
+const gameOrigin = (process.env.PUBLIC_URL || 'https://speedle.lol').replace(/\/+$/, '');
 const dailyDeck = JSON.parse(await readFile(path.join(here, 'public', 'daily-deck.json'), 'utf8'));
 if (!Array.isArray(dailyDeck) || !dailyDeck.length) throw new Error('The daily question deck is empty.');
 
