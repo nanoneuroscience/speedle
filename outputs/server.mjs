@@ -1,16 +1,24 @@
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 4173);
 const rooms = new Map();
 const streams = new Map();
+const scoreDataDir = process.env.SPEEDLE_DATA_DIR || path.join(os.tmpdir(), 'speedle-data');
+const scoreDataFile = path.join(scoreDataDir, 'daily-scores.json');
+let dailyScoreStore = null;
+let dailyScoreStoreDay = null;
+let dailyScoreWrites = Promise.resolve();
 const lanAddress = Object.values(os.networkInterfaces()).flat().find(x => x && x.family === 'IPv4' && !x.internal)?.address || 'localhost';
 const configuredGameOrigin = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL;
 const gameOrigin = (configuredGameOrigin || `http://${lanAddress}:${PORT}`).replace(/\/+$/, '');
+const dailyDeck = JSON.parse(await readFile(path.join(here, 'public', 'daily-deck.json'), 'utf8'));
+if (!Array.isArray(dailyDeck) || !dailyDeck.length) throw new Error('The daily question deck is empty.');
 
 const deck = [
   { name: 'Peregrine falcon', kind: 'ANIMAL · BIRD', icon: '🦅', speed: 240, range: 300, note: 'In a hunting dive, a peregrine falcon can reach extraordinary speeds.' },
@@ -133,6 +141,56 @@ function send(res, status, body) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
   res.end(JSON.stringify(body));
 }
+function utcDayNumber(day) {
+  const [year, month, date] = day.split('-').map(Number);
+  return Math.floor(Date.UTC(year, month - 1, date) / 86400000);
+}
+function dailyQuestionFor(day) {
+  const index = ((utcDayNumber(day) % dailyDeck.length) + dailyDeck.length) % dailyDeck.length;
+  return dailyDeck[index];
+}
+function participantHash(day, id) {
+  return createHash('sha256').update(`${day}:${id}`).digest('hex');
+}
+async function persistDailyScoreStore() {
+  await mkdir(scoreDataDir, { recursive: true });
+  const temporaryFile = `${scoreDataFile}.${randomUUID()}.tmp`;
+  await writeFile(temporaryFile, JSON.stringify(dailyScoreStore), { encoding: 'utf8', mode: 0o600 });
+  await rename(temporaryFile, scoreDataFile);
+}
+async function loadDailyScoreStore(day) {
+  if (dailyScoreStoreDay === day && dailyScoreStore) return dailyScoreStore;
+  let previous = null;
+  try { previous = JSON.parse(await readFile(scoreDataFile, 'utf8')); } catch {}
+  dailyScoreStore = previous?.day === day && previous.participants && typeof previous.participants === 'object'
+    ? { day, participants: previous.participants }
+    : { day, participants: {} };
+  dailyScoreStoreDay = day;
+  await persistDailyScoreStore();
+  return dailyScoreStore;
+}
+function dailyScoreSummary(day, currentParticipantHash) {
+  const currentScore = dailyScoreStore.participants[currentParticipantHash];
+  if (!Number.isInteger(currentScore) || currentScore < 0 || currentScore > 100) return null;
+  const others = Object.entries(dailyScoreStore.participants)
+    .filter(([hash, score]) => hash !== currentParticipantHash && Number.isInteger(score) && score >= 0 && score <= 100)
+    .map(([, score]) => score);
+  const buckets = Array(10).fill(0);
+  for (const score of others) buckets[Math.min(9, Math.floor(score / 10))] += 1;
+  const averageAccuracy = others.length ? Math.round(others.reduce((sum, score) => sum + score, 0) / others.length) : null;
+  const below = others.filter(score => score < currentScore).length;
+  const tied = others.filter(score => score === currentScore).length;
+  const percentile = others.length ? Math.round((below + tied / 2) / others.length * 100) : null;
+  return { day, myAccuracy: currentScore, playerCount: others.length, averageAccuracy, percentile, buckets };
+}
+async function readJsonBody(req, limit = 4096) {
+  let body = '';
+  for await (const part of req) {
+    body += part;
+    if (body.length > limit) throw new Error('Request is too large.');
+  }
+  try { return JSON.parse(body || '{}'); } catch { throw new Error('Invalid request.'); }
+}
 function publish(room) {
   const payload = `data: ${JSON.stringify(safeRoom(room))}\n\n`;
   for (const response of streams.get(room.code) || []) response.write(payload);
@@ -176,6 +234,55 @@ const server = http.createServer(async (req, res) => {
     streams.get(code).add(res);
     req.on('close', () => streams.get(code)?.delete(res));
     return;
+  }
+  if (url.pathname === '/api/daily-scores') {
+    if (req.method === 'GET') {
+      const day = url.searchParams.get('day') || '';
+      const participantId = url.searchParams.get('participant') || '';
+      const today = new Date().toISOString().slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day !== today) return send(res, 409, { error: 'Today’s challenge has changed. Reload the page to continue.' });
+      if (!/^[0-9a-f-]{36}$/i.test(participantId)) return send(res, 400, { error: 'Could not load your community score.' });
+      try {
+        const operation = dailyScoreWrites.then(async () => {
+          await loadDailyScoreStore(day);
+          return dailyScoreSummary(day, participantHash(day, participantId));
+        });
+        dailyScoreWrites = operation.catch(() => {});
+        const summary = await operation;
+        if (!summary) return send(res, 409, { error: 'Submit today’s guess before viewing the distribution.' });
+        return send(res, 200, summary);
+      } catch (error) {
+        console.error('Could not read daily scores:', error.message);
+        return send(res, 503, { error: 'Community scores are temporarily unavailable.' });
+      }
+    }
+    if (req.method !== 'POST') return send(res, 405, { error: 'Use GET or POST.' });
+    let data;
+    try { data = await readJsonBody(req); } catch (error) { return send(res, 400, { error: error.message }); }
+    const day = String(data.day || '');
+    const participantId = String(data.participantId || '');
+    const guess = Number(data.guess);
+    const today = new Date().toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day !== today) return send(res, 409, { error: 'Today’s challenge has changed. Reload the page to continue.' });
+    if (!/^[0-9a-f-]{36}$/i.test(participantId)) return send(res, 400, { error: 'Could not save your score.' });
+    const question = dailyQuestionFor(day);
+    if (!Number.isFinite(guess) || guess < 0 || guess > question.range) return send(res, 400, { error: 'Choose a speed within today’s range.' });
+    const accuracy = 100 - Math.min(100, Math.round(100 * Math.abs(guess - question.speed) / question.range));
+    const hash = participantHash(day, participantId);
+    const operation = dailyScoreWrites.then(async () => {
+      const store = await loadDailyScoreStore(day);
+      if (Object.hasOwn(store.participants, hash)) return;
+      dailyScoreStore = { day, participants: { ...store.participants, [hash]: accuracy } };
+      try { await persistDailyScoreStore(); } catch (error) { dailyScoreStore = store; throw error; }
+    });
+    dailyScoreWrites = operation.catch(() => {});
+    try {
+      await operation;
+      return send(res, 200, { saved: true });
+    } catch (error) {
+      console.error('Could not save daily score:', error.message);
+      return send(res, 503, { error: 'Your score could not be added right now.' });
+    }
   }
   if (url.pathname.startsWith('/api/')) {
     if (req.method !== 'POST') return send(res, 405, { error: 'Use POST.' });
@@ -261,7 +368,7 @@ const server = http.createServer(async (req, res) => {
   if (!file.startsWith(path.join(here, 'public'))) return send(res, 403, { error: 'Forbidden.' });
   try {
     const content = await import('node:fs/promises').then(fs => fs.readFile(file));
-    const type = file.endsWith('.html') ? 'text/html; charset=utf-8' : file.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8';
+    const type = file.endsWith('.html') ? 'text/html; charset=utf-8' : file.endsWith('.css') ? 'text/css; charset=utf-8' : file.endsWith('.json') ? 'application/json; charset=utf-8' : 'text/javascript; charset=utf-8';
     res.writeHead(200, { 'content-type': type }); res.end(content);
   } catch { send(res, 404, { error: 'Not found.' }); }
 });

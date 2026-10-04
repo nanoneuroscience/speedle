@@ -26,6 +26,10 @@ let dailyUnitSystem = localStorage.getItem('speedle-daily-units') === 'metric' ?
 let dailyResult = null;
 let dailyMidnightTimer = null;
 let dailyError = '';
+let dailyCommunityStats = null;
+let dailyCommunityStatus = 'idle';
+let dailyCommunityError = '';
+let dailyCommunityRequestId = 0;
 const questionVisuals = {
   'Peregrine falcon': { icon: '🦅', speed: 240 }, 'Cheetah': { icon: '🐆', speed: 70 },
   'Sailfish': { icon: '🐟', speed: 68 }, 'Ostrich': { icon: '🦤', speed: 43 },
@@ -53,19 +57,29 @@ function displaySpeedNote(note, unitSystem = state?.unitSystem) {
 }
 function dailyRange() { return dailyChallenge ? displayRange(dailyChallenge.question, dailyUnitSystem) : 0; }
 function dailyResultKey(day) { return `speedle-daily-result-${day}`; }
+function dailyParticipantId(day) {
+  const key = `speedle-daily-participant-${day}`;
+  let id = localStorage.getItem(key);
+  if (!id) { id = crypto.randomUUID(); localStorage.setItem(key, id); }
+  return id;
+}
 function scheduleDailyRefresh(serverTime) {
   clearTimeout(dailyMidnightTimer);
   const nextUtcMidnight = Date.UTC(serverTime.getUTCFullYear(), serverTime.getUTCMonth(), serverTime.getUTCDate() + 1);
   dailyMidnightTimer = setTimeout(() => {
+    dailyCommunityRequestId += 1;
     dailyDeckStatus = 'idle'; dailyChallenge = null; dailyGuess = null; dailyResult = null;
+    dailyCommunityStats = null; dailyCommunityStatus = 'idle'; dailyCommunityError = '';
     guessRunnerRate = 0; actualRunnerRate = 0; guessRunnerProgress = 0; actualRunnerProgress = 0;
     if (!state) { renderDailyCard(); loadDailyChallenge(); }
   }, Math.max(1000, nextUtcMidnight - serverTime.getTime() + 1200));
 }
 async function loadDailyChallenge() {
   if (dailyDeckStatus === 'loading' || dailyDeckStatus === 'ready' || dailyDeckStatus === 'error') return;
+  dailyCommunityRequestId += 1;
   dailyDeckStatus = 'loading';
   dailyError = '';
+  dailyCommunityStats = null; dailyCommunityStatus = 'idle'; dailyCommunityError = '';
   try {
     const response = await fetch('/daily-deck.json', { cache: 'no-store' });
     if (!response.ok) throw new Error('Could not load today’s challenge.');
@@ -104,6 +118,53 @@ async function loadDailyChallenge() {
     dailyError = error.message;
   }
   if (!state) renderDailyCard();
+  if (!state && dailyResult) void refreshDailyCommunity(true);
+}
+async function refreshDailyCommunity(saveScore = false) {
+  if (!dailyChallenge || !dailyResult) return;
+  const requestId = ++dailyCommunityRequestId;
+  const { day } = dailyChallenge;
+  const participantId = dailyParticipantId(day);
+  dailyCommunityStatus = 'loading';
+  dailyCommunityError = '';
+  if (!state) renderDailyCard();
+  try {
+    if (saveScore) {
+      const submission = await fetch('/api/daily-scores', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ day, participantId, guess: dailyResult.guess }),
+      });
+      const submissionData = await submission.json();
+      if (!submission.ok) throw new Error(submissionData.error || 'Could not submit today’s score.');
+    }
+    const query = new URLSearchParams({ day, participant: participantId });
+    const response = await fetch(`/api/daily-scores?${query}`, { cache: 'no-store' });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not load today’s scores.');
+    if (requestId !== dailyCommunityRequestId) return;
+    dailyCommunityStats = data;
+    dailyCommunityStatus = 'ready';
+  } catch (error) {
+    if (requestId !== dailyCommunityRequestId) return;
+    dailyCommunityError = error.message;
+    dailyCommunityStatus = 'error';
+  }
+  if (!state) renderDailyCard();
+}
+function dailyCommunityPanel() {
+  const header = `<div class="daily-community-head"><div><div class="eyebrow">TODAY’S COMMUNITY</div><h3>How others scored</h3></div><button class="community-refresh" id="daily-community-refresh" type="button" aria-label="Refresh community scores" title="Refresh scores" ${dailyCommunityStatus === 'loading' ? 'disabled' : ''}>↻</button></div>`;
+  if (dailyCommunityStatus === 'loading' || dailyCommunityStatus === 'idle') return `<section class="daily-community" aria-live="polite">${header}<div class="community-message"><span class="spinner"></span> Adding your anonymous score…</div></section>`;
+  if (dailyCommunityStatus === 'error') return `<section class="daily-community" aria-live="polite">${header}<div class="community-message"><span>${escapeHtml(dailyCommunityError || 'Could not load community scores.')}</span><button class="btn community-retry" id="daily-community-retry" type="button">Try again</button></div></section>`;
+  const stats = dailyCommunityStats;
+  if (!stats || stats.playerCount === 0) return `<section class="daily-community" aria-live="polite">${header}<div class="community-message">You’re the first today. Your score will appear in the curve other players see.</div><p class="community-privacy">Anonymous accuracy scores only. Names and guesses aren’t shown.</p></section>`;
+  const max = Math.max(1, ...stats.buckets);
+  const userBucket = Math.min(9, Math.floor(stats.myAccuracy / 10));
+  const bars = stats.buckets.map((count, index) => {
+    const height = count ? Math.max(5, Math.round(count / max * 100)) : 0;
+    const label = index === 9 ? '90–100' : `${index * 10}–${index * 10 + 9}`;
+    return `<div class="community-bin ${index === userBucket ? 'is-your-score' : ''}" title="${label}% accuracy: ${count} players"><span class="community-bin-count">${count || ''}</span><div class="community-bar-track"><i style="height:${height}%"></i></div><span class="community-bin-label">${label}</span></div>`;
+  }).join('');
+  return `<section class="daily-community" aria-live="polite">${header}<div class="community-stats"><div><strong>${stats.playerCount}</strong><span>OTHER PLAYERS</span></div><div><strong>${stats.averageAccuracy}%</strong><span>AVERAGE</span></div><div><strong>${stats.percentile}%</strong><span>BEAT</span></div></div><div class="community-chart" role="img" aria-label="Accuracy distribution for ${stats.playerCount} other players. Your score is ${stats.myAccuracy} percent.">${bars}</div><div class="community-axis-note"><span>ACCURACY SCORE</span><span class="community-your-key"><i></i> YOUR SCORE RANGE</span></div><p class="community-privacy">Anonymous accuracy scores only. Names and guesses aren’t shown.</p></section>`;
 }
 function dailyPanel() {
   if (dailyDeckStatus === 'loading' || dailyDeckStatus === 'idle') return `<div class="daily-loading"><span class="spinner"></span> Loading today’s shared challenge…</div>`;
@@ -116,10 +177,12 @@ function dailyPanel() {
   const resultGuess = result ? displaySpeed(result.guess, resultUnit) : null;
   const shownGuess = result ? resultGuess : value;
   const formattedDate = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${dailyChallenge.day}T00:00:00Z`));
+  const resultContent = result
+    ? `<div class="daily-result"><div class="daily-score"><strong>${result.accuracy}%</strong><span>ACCURACY</span></div><div class="daily-result-values"><div><span>REAL SPEED</span><strong>${displaySpeed(question.speed, resultUnit)} ${unitShort(resultUnit)}</strong></div><div><span>YOUR GUESS</span><strong>${resultGuess} ${unitShort(resultUnit)}</strong></div><div><span>OFF BY</span><strong>${displaySpeed(Math.abs(result.guess - question.speed), resultUnit)} ${unitShort(resultUnit)}</strong></div></div></div>${dailyCommunityPanel()}<div class="hint daily-reset-hint">Come back tomorrow for a new challenge.</div>`
+    : `<div class="daily-control-row"><div class="daily-unit-row"><label class="field-label" for="daily-unit-system">SPEED UNITS</label><select class="input daily-unit-select" id="daily-unit-system" aria-label="Daily guess speed units"><option value="imperial" ${dailyUnitSystem === 'imperial' ? 'selected' : ''}>Imperial · MPH</option><option value="metric" ${dailyUnitSystem === 'metric' ? 'selected' : ''}>Metric · KM/H</option></select></div><div class="guess-control daily-guess-control"><div class="guess-top"><label for="daily-guess-slider">SET YOUR GUESSED SPEED</label><div class="guess-number"><span id="daily-guess-readout">${value}</span> <small>${unitLabel(dailyUnitSystem)}</small></div></div><div class="range-wrap"><input class="range" id="daily-guess-slider" type="range" min="0" max="${max}" value="${value}" step="1" style="--progress:${value / max * 100}%" aria-label="Set your daily speed guess in ${dailyUnitSystem === 'metric' ? 'kilometres per hour' : 'miles per hour'}"/></div><div class="range-labels"><span>0 ${unitShort(dailyUnitSystem)}</span><span>${max} ${unitShort(dailyUnitSystem)}</span></div></div><button class="btn btn-primary daily-submit" id="daily-submit">Reveal today’s speed</button></div>`;
   return `<div class="daily-head"><div><h2>Daily Speedle</h2></div><span class="count-tag">${escapeHtml(formattedDate)}</span></div>
     <div class="daily-question-strip"><div><div class="eyebrow">${escapeHtml(question.kind)}</div><h3>${escapeHtml(question.name)}</h3><p>${result ? escapeHtml(displaySpeedNote(question.note, resultUnit)) : 'What’s its top speed?'}</p></div><span class="daily-question-icon" aria-hidden="true">${escapeHtml(question.icon)}</span></div>
-    <div class="daily-lanes-wrap">${speedLanes(question, shownGuess, Boolean(result), resultUnit)}</div>
-    ${result ? `<div class="daily-result"><div class="daily-score"><strong>${result.accuracy}%</strong><span>ACCURACY</span></div><div class="daily-result-values"><div><span>REAL SPEED</span><strong>${displaySpeed(question.speed, resultUnit)} ${unitShort(resultUnit)}</strong></div><div><span>YOUR GUESS</span><strong>${resultGuess} ${unitShort(resultUnit)}</strong></div><div><span>OFF BY</span><strong>${displaySpeed(Math.abs(result.guess - question.speed), resultUnit)} ${unitShort(resultUnit)}</strong></div></div></div><div class="hint daily-reset-hint">Come back tomorrow for a new challenge.</div>` : `<div class="daily-control-row"><div class="daily-unit-row"><label class="field-label" for="daily-unit-system">SPEED UNITS</label><select class="input daily-unit-select" id="daily-unit-system" aria-label="Daily guess speed units"><option value="imperial" ${dailyUnitSystem === 'imperial' ? 'selected' : ''}>Imperial · MPH</option><option value="metric" ${dailyUnitSystem === 'metric' ? 'selected' : ''}>Metric · KM/H</option></select></div><div class="guess-control daily-guess-control"><div class="guess-top"><label for="daily-guess-slider">SET YOUR GUESSED SPEED</label><div class="guess-number"><span id="daily-guess-readout">${value}</span> <small>${unitLabel(dailyUnitSystem)}</small></div></div><div class="range-wrap"><input class="range" id="daily-guess-slider" type="range" min="0" max="${max}" value="${value}" step="1" style="--progress:${value / max * 100}%" aria-label="Set your daily speed guess in ${dailyUnitSystem === 'metric' ? 'kilometres per hour' : 'miles per hour'}"/></div><div class="range-labels"><span>0 ${unitShort(dailyUnitSystem)}</span><span>${max} ${unitShort(dailyUnitSystem)}</span></div></div><button class="btn btn-primary daily-submit" id="daily-submit">Reveal today’s speed</button></div>`}`;
+    <div class="daily-lanes-wrap">${speedLanes(question, shownGuess, Boolean(result), resultUnit)}</div>${resultContent}`;
 }
 function renderDailyCard() {
   const content = view.querySelector('#daily-challenge-content');
@@ -133,6 +196,8 @@ function bindDailyCard() {
     renderDailyCard();
     loadDailyChallenge();
   });
+  view.querySelector('#daily-community-refresh')?.addEventListener('click', () => void refreshDailyCommunity(false));
+  view.querySelector('#daily-community-retry')?.addEventListener('click', () => void refreshDailyCommunity(true));
   view.querySelector('#daily-unit-system')?.addEventListener('change', event => {
     const oldRange = dailyRange();
     const ratio = oldRange ? Number(dailyGuess) / oldRange : .5;
@@ -160,6 +225,7 @@ function bindDailyCard() {
     guessRunnerRate = speedToRunnerRate(canonicalGuess, question.range);
     actualRunnerRate = speedToRunnerRate(question.speed, question.range);
     renderDailyCard();
+    void refreshDailyCommunity(true);
   });
 }
 function speedToRunnerRate(speed, range) {

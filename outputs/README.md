@@ -16,9 +16,11 @@ The host computer needs to stay on while you play. The game itself uses the loca
 
 Run this as a single Node web service with `outputs` as its root directory and `node server.mjs` as its start command. The server uses the hosting provider’s `PORT` setting. Set `PUBLIC_URL` to the public HTTPS origin so room invites point to the hosted site; Render’s `RENDER_EXTERNAL_URL` is used automatically when available. Rooms are held in memory, so restarting or redeploying the service ends active games, and multiple server instances cannot share a room.
 
+The Daily Speedle community distribution stores one anonymous accuracy score per browser for the current UTC day. It keeps only hashed browser IDs and accuracy values, not names or guessed speeds. Set `SPEEDLE_DATA_DIR` to a persistent writable directory for these scores to survive restarts and deploys. On Render, mount a persistent disk at `/var/data` and set `SPEEDLE_DATA_DIR=/var/data`. Without a persistent directory, scores use a temporary local folder and can reset when the service restarts.
+
 ## Daily Guess
 
-Choose **Daily guess** on the home page to play solo. Everyone receives the same object for the UTC date, with one guess per browser per day. The answer is revealed with an accuracy score, and today’s result is saved locally on that browser.
+Choose **Daily guess** on the home page to play solo. Everyone receives the same object for the UTC date, with one guess per browser per day. The answer is revealed with an accuracy score, and today’s result is saved locally on that browser. After revealing, players can compare their score with an anonymous histogram of other players’ accuracy for the same challenge.
 
 ## Rules
 

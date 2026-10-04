@@ -78,6 +78,30 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: -.055em; }
 .daily-result-values span { display: block; font-size: 8px; white-space: nowrap; }
 .daily-result-values strong { display: block; margin-top: 6px; font: 600 13px var(--mono); white-space: nowrap; }
 .daily-result > p { margin: 13px 0 0; color: #738078; font-size: 12px; line-height: 1.45; }
+.daily-community { margin-top: 16px; padding: 19px 20px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--white); }
+.daily-community-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.daily-community-head .eyebrow { font-size: 8px; }
+.daily-community-head h3 { margin: 6px 0 0; font-size: 22px; }
+.community-refresh { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 50%; background: #f7f7f2; color: var(--ink); font: 20px/1 var(--sans); cursor: pointer; }
+.community-refresh:hover { background: #edf1e6; }
+.community-refresh:disabled { opacity: .45; cursor: wait; }
+.community-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 15px; }
+.community-stats > div { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 7px; background: #f3f3ed; }
+.community-stats strong { font: 600 18px/1 var(--mono); }
+.community-stats span { color: var(--muted); font: 500 7px var(--mono); letter-spacing: .08em; }
+.community-chart { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); align-items: end; gap: 8px; height: 126px; margin-top: 15px; padding: 0 2px; }
+.community-bin { display: grid; grid-template-rows: 17px 1fr 15px; align-items: end; height: 100%; min-width: 0; text-align: center; }
+.community-bin-count { color: #829087; font: 8px var(--mono); }
+.community-bar-track { position: relative; width: min(100%, 24px); height: 86px; justify-self: center; overflow: hidden; border-radius: 4px 4px 2px 2px; background: #f0f1eb; }
+.community-bar-track i { position: absolute; right: 0; bottom: 0; left: 0; display: block; border-radius: 4px 4px 0 0; background: #afc28d; }
+.community-bin.is-your-score .community-bar-track i { background: var(--orange); }
+.community-bin-label { color: #7e8a83; font: 7px var(--mono); white-space: nowrap; }
+.community-axis-note { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 7px; color: #87918d; font: 7px var(--mono); letter-spacing: .06em; }
+.community-your-key { display: flex; align-items: center; gap: 5px; }
+.community-your-key i { display: inline-block; width: 7px; height: 7px; border-radius: 2px; background: var(--orange); }
+.community-message { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; min-height: 76px; color: #70807b; font-size: 12px; line-height: 1.5; text-align: center; }
+.community-retry { padding: 9px 12px; font-size: 11px; }
+.community-privacy { margin: 11px 0 0; color: #8a9590; font-size: 9px; line-height: 1.4; }
 .rules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 24px; }
 .rule { background: #eeeee7; padding: 17px 18px; }
 .rule-no { font: 10px var(--mono); color: var(--orange); }
@@ -264,6 +288,14 @@ select.input { appearance: none; -webkit-appearance: none; padding-right: 38px; 
   .daily-result { margin-top: 14px; padding: 13px; } .daily-result-values { gap: 6px; }
   .daily-result-values div { padding: 9px 7px; } .daily-result-values span { font-size: 7px; }
   .daily-result-values strong { font-size: 10px; }
+  .daily-community { margin-top: 11px; padding: 13px 11px 11px; }
+  .daily-community-head h3 { font-size: 18px; } .community-refresh { width: 30px; height: 30px; }
+  .community-stats { gap: 5px; margin-top: 11px; } .community-stats > div { padding: 9px 7px; }
+  .community-stats strong { font-size: 15px; } .community-stats span { font-size: 6px; }
+  .community-chart { gap: 3px; height: 112px; margin-top: 12px; }
+  .community-bin { grid-template-rows: 15px 1fr 13px; } .community-bar-track { height: 76px; }
+  .community-bin-label { font-size: 6px; letter-spacing: -.04em; }
+  .community-axis-note { font-size: 6px; } .community-privacy { font-size: 8px; }
   .rule { display: grid; grid-template-columns: 22px 1fr; align-items: start; padding: 12px 14px; }
   .rule-no { grid-row: span 2; } .rule strong { margin: 0 0 2px; }
   .game-layout { display: flex; flex-direction: column; padding: 12px 0 15px; gap: 12px; }
