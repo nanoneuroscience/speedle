@@ -156,7 +156,7 @@ function dailyCommunityPanel() {
   if (dailyCommunityStatus === 'loading' || dailyCommunityStatus === 'idle') return `<section class="daily-community" aria-live="polite">${header}<div class="community-message"><span class="spinner"></span> Adding your anonymous score…</div></section>`;
   if (dailyCommunityStatus === 'error') return `<section class="daily-community" aria-live="polite">${header}<div class="community-message"><span>${escapeHtml(dailyCommunityError || 'Could not load community scores.')}</span><button class="btn community-retry" id="daily-community-retry" type="button">Try again</button></div></section>`;
   const stats = dailyCommunityStats;
-  if (!stats || stats.playerCount === 0) return `<section class="daily-community" aria-live="polite">${header}<div class="community-message">You’re the first today. Your score will appear in the curve other players see.</div><p class="community-privacy">Anonymous accuracy scores only. Names and guesses aren’t shown.</p></section>`;
+  if (!stats || stats.playerCount === 0) return `<section class="daily-community" aria-live="polite">${header}<div class="community-message">You’re the first today. Your score will appear in the curve other players see.</div></section>`;
   const max = Math.max(1, ...stats.buckets);
   const userBucket = Math.min(9, Math.floor(stats.myAccuracy / 10));
   const bars = stats.buckets.map((count, index) => {
@@ -164,7 +164,7 @@ function dailyCommunityPanel() {
     const label = index === 9 ? '90–100' : `${index * 10}–${index * 10 + 9}`;
     return `<div class="community-bin ${index === userBucket ? 'is-your-score' : ''}" title="${label}% accuracy: ${count} players"><span class="community-bin-count">${count || ''}</span><div class="community-bar-track"><i style="height:${height}%"></i></div><span class="community-bin-label">${label}</span></div>`;
   }).join('');
-  return `<section class="daily-community" aria-live="polite">${header}<div class="community-stats"><div><strong>${stats.playerCount}</strong><span>OTHER PLAYERS</span></div><div><strong>${stats.averageAccuracy}%</strong><span>AVERAGE</span></div><div><strong>${stats.percentile}%</strong><span>BEAT</span></div></div><div class="community-chart" role="img" aria-label="Accuracy distribution for ${stats.playerCount} other players. Your score is ${stats.myAccuracy} percent.">${bars}</div><div class="community-axis-note"><span>ACCURACY SCORE</span><span class="community-your-key"><i></i> YOUR SCORE RANGE</span></div><p class="community-privacy">Anonymous accuracy scores only. Names and guesses aren’t shown.</p></section>`;
+  return `<section class="daily-community" aria-live="polite">${header}<div class="community-stats"><div><strong>${stats.playerCount}</strong><span>OTHER PLAYERS</span></div><div><strong>${stats.averageAccuracy}%</strong><span>AVERAGE</span></div><div><strong>${stats.percentile}%</strong><span>BEAT</span></div></div><div class="community-chart" role="img" aria-label="Accuracy distribution for ${stats.playerCount} other players. Your score is ${stats.myAccuracy} percent.">${bars}</div><div class="community-axis-note"><span>ACCURACY SCORE</span><span class="community-your-key"><i></i> YOUR SCORE RANGE</span></div></section>`;
 }
 function dailyPanel() {
   if (dailyDeckStatus === 'loading' || dailyDeckStatus === 'idle') return `<div class="daily-loading"><span class="spinner"></span> Loading today’s shared challenge…</div>`;
