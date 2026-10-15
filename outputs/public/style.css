@@ -115,7 +115,7 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: -.055em; }
 .community-x-axis span:last-child { transform: translateX(-100%); }
 .community-x-axis span:last-child::before { left: 100%; }
 .community-axis-note { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 7px; color: #87918d; font: 7px var(--mono); letter-spacing: .06em; }
-.community-your-key { display: flex; align-items: center; gap: 5px; }
+.community-your-key { display: flex; align-items: center; gap: 5px; margin-left: auto; }
 .community-your-key i { display: inline-block; width: 7px; height: 7px; border-radius: 2px; background: var(--orange); }
 .community-message { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; min-height: 76px; color: #70807b; font-size: 12px; line-height: 1.5; text-align: center; }
 .community-retry { padding: 9px 12px; font-size: 11px; }
