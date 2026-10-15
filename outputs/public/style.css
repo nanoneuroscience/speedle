@@ -47,6 +47,63 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: -.055em; }
 .hint { margin: 15px 0 0; font-size: 11px; line-height: 1.5; color: #8a9590; }
 .daily-section { margin: 28px 0 52px; }
 .daily-game-panel { padding: 28px 32px; box-shadow: 0 12px 34px #1a342109; }
+.solo-mode-tabs { display: flex; align-items: center; gap: 22px; margin: 0 0 22px; border-bottom: 1px solid var(--line); }
+.solo-mode-tab { position: relative; padding: 0 0 12px; border: 0; background: transparent; color: #8b9690; font: 600 13px var(--sans); cursor: pointer; }
+.solo-mode-tab.active { color: var(--ink); }
+.solo-mode-tab.active::after { position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--orange); content: ""; }
+.endless-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.endless-head h2 { margin: 0; font-size: clamp(27px, 3.5vw, 38px); }
+.endless-head p { margin: 7px 0 0; color: #7d8983; font-size: 14px; }
+.endless-unit-control { display: flex; flex-direction: column; min-width: 120px; }
+.endless-unit-control .field-label { margin-bottom: 5px; }
+.endless-unit-control .input { height: 40px; font-size: 12px; }
+.endless-scoreboard { display: grid; grid-template-columns: 110px 110px minmax(0, 1fr); align-items: center; gap: 10px; margin: 20px 0 14px; padding: 12px 16px; border-radius: 9px; background: #f3f3ed; }
+.endless-scoreboard > div { display: flex; align-items: baseline; gap: 8px; }
+.endless-scoreboard strong { font: 700 25px/1 var(--display); letter-spacing: -.05em; }
+.endless-scoreboard span { color: var(--muted); font: 500 9px var(--mono); letter-spacing: .08em; }
+.endless-scoreboard .endless-round-prompt { justify-self: end; color: #728169; }
+.endless-ready-flag { display: inline-block; margin-right: 5px; font-size: 13px; vertical-align: -2px; }
+.endless-stage { position: relative; }
+.endless-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+.endless-choice { display: flex; min-width: 0; min-height: 230px; flex-direction: column; align-items: flex-start; padding: 17px 20px 18px; border: 1px solid #e1e5dc; border-radius: 10px; background: var(--white); color: var(--ink); text-align: left; cursor: pointer; transition: transform .16s, border-color .16s, background .16s, box-shadow .16s; }
+.endless-choice.endless-hidden { visibility: hidden; opacity: 0; transform: translateX(18px) scale(.96); pointer-events: none; }
+.endless-choice.endless-visible { visibility: visible; opacity: 1; transform: none; }
+.endless-choice.endless-enter-left { visibility: visible; animation: endlessObjectLeft .48s cubic-bezier(.2,.78,.25,1) both; }
+.endless-choice.endless-enter-right { visibility: visible; animation: endlessObjectRight .48s cubic-bezier(.2,.78,.25,1) both; }
+.endless-choice:not(:disabled):hover { transform: translateY(-2px); border-color: #aabd82; box-shadow: 0 7px 18px #1a34210d; }
+.endless-choice:focus-visible { outline: 3px solid #ee765155; outline-offset: 2px; }
+.endless-choice:disabled { cursor: default; }
+.endless-choice.is-faster { border-color: #abc881; background: #f8fbf1; }
+.endless-choice.is-picked-wrong { border-color: #e6a28f; background: #fff9f6; }
+.endless-choice-top { display: flex; width: 100%; min-height: 75px; align-items: flex-start; justify-content: space-between; }
+.endless-choice-icon { display: grid; width: 68px; height: 68px; place-items: center; border-radius: 50%; background: #f3f3ed; font: 42px/1 "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.endless-answer-badge { padding: 6px 8px; border-radius: 4px; background: #edf3e3; color: #66823d; font: 600 8px var(--mono); letter-spacing: .08em; }
+.endless-choice-kind { margin-top: 11px; color: var(--muted); font: 500 8px var(--mono); letter-spacing: .1em; }
+.endless-choice strong { margin-top: 5px; font: 600 clamp(20px, 2.4vw, 29px)/1.1 var(--display); letter-spacing: -.045em; }
+.endless-speed { margin-top: 10px; font: 600 17px var(--mono); }
+.endless-speed small { color: var(--muted); font-size: 10px; font-weight: 500; }
+.endless-pick-hint { margin-top: 10px; color: #8b9690; font-size: 11px; }
+.endless-vs { position: absolute; z-index: 3; top: 50%; left: 50%; display: grid; width: 78px; height: 78px; place-items: center; border: 5px solid var(--paper); border-radius: 50%; background: var(--orange); box-shadow: 0 7px 18px #172b2730; color: white; font: 800 24px/1 var(--display); letter-spacing: -.04em; transform: translate(-50%, -50%); }
+.endless-vs.is-entering { animation: endlessVsPop .46s cubic-bezier(.18,.85,.24,1.25) both; }
+.endless-vs.is-visible { opacity: 1; }
+.endless-countdown { position: absolute; z-index: 4; top: 50%; left: 50%; display: grid; place-items: center; transform: translate(-50%, -50%); pointer-events: none; }
+.endless-countdown > span:first-child { display: grid; width: 110px; height: 110px; place-items: center; border: 5px solid var(--paper); border-radius: 50%; background: #172b27ed; box-shadow: 0 9px 25px #172b2740; color: white; font: 800 54px/1 var(--display); animation: endlessCountdownPop .45s cubic-bezier(.18,.85,.24,1.25) both; }
+.endless-countdown.is-go > span:first-child { width: 126px; height: 126px; background: var(--green); color: var(--ink); font-size: 38px; }
+.endless-race-flag { position: absolute; top: -35px; right: -34px; font: 42px/1 "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; transform-origin: 15% 90%; animation: endlessFlagWave .7s ease-in-out infinite alternate; }
+.endless-feedback { display: flex; min-height: 66px; align-items: center; justify-content: space-between; gap: 16px; margin-top: 14px; padding: 11px 15px; border-radius: 8px; background: #f7f7f2; }
+.endless-feedback:empty { display: none; }
+.endless-feedback > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.endless-feedback strong { font: 600 13px var(--sans); }
+.endless-feedback span { color: #75837d; font-size: 11px; line-height: 1.4; }
+.endless-feedback.is-correct { background: #f1f6e8; }
+.endless-feedback.is-over { background: #fff3ed; }
+.endless-feedback .btn { flex: 0 0 auto; padding: 11px 15px; }
+@keyframes endlessObjectLeft { from { opacity: 0; transform: translateX(-48px) scale(.94); } to { opacity: 1; transform: translateX(0) scale(1); } }
+@keyframes endlessObjectRight { from { opacity: 0; transform: translateX(48px) scale(.94); } to { opacity: 1; transform: translateX(0) scale(1); } }
+@keyframes endlessVsPop { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.25) rotate(-18deg); } 65% { opacity: 1; transform: translate(-50%, -50%) scale(1.16) rotate(4deg); } 100% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0); } }
+@keyframes endlessCountdownPop { 0% { opacity: 0; transform: scale(.5) rotate(-9deg); } 65% { opacity: 1; transform: scale(1.13) rotate(3deg); } 100% { opacity: 1; transform: scale(1) rotate(0); } }
+@keyframes endlessFlagWave { from { transform: rotate(-12deg) translateY(2px); } to { transform: rotate(12deg) translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) { .endless-enter-left, .endless-enter-right, .endless-vs.is-entering, .endless-countdown > span:first-child, .endless-race-flag { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
 .daily-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
 .daily-head h2 { font-size: clamp(27px, 3.5vw, 38px); margin: 0; }
 .daily-head .count-tag { padding: 8px 12px; font-size: 10px; white-space: nowrap; }
@@ -301,6 +358,19 @@ select.input { appearance: none; -webkit-appearance: none; padding-right: 38px; 
   .hero-pitch strong { font-size: 13px; } .hero-pitch p { font-size: 10px; }
   .entry-card { padding: 21px; } .rules { margin-top: 14px; grid-template-columns: 1fr; }
   .daily-section { margin: 22px 0 35px; } .daily-game-panel { padding: 18px; }
+  .solo-mode-tabs { gap: 18px; margin-bottom: 17px; } .solo-mode-tab { font-size: 12px; padding-bottom: 10px; }
+  .endless-head { align-items: flex-start; gap: 12px; } .endless-head h2 { font-size: 27px; } .endless-head p { max-width: 330px; font-size: 12px; }
+  .endless-unit-control { min-width: 94px; } .endless-unit-control .input { height: 36px; font-size: 11px; }
+  .endless-scoreboard { grid-template-columns: 1fr 1fr; gap: 8px 10px; margin: 15px 0 11px; padding: 10px 12px; }
+  .endless-scoreboard .endless-round-prompt { grid-column: 1 / -1; justify-self: start; font-size: 8px; }
+  .endless-pair { gap: 9px; } .endless-choice { min-height: 195px; padding: 13px 13px 14px; }
+  .endless-vs { width: 60px; height: 60px; border-width: 4px; font-size: 19px; }
+  .endless-countdown > span:first-child { width: 88px; height: 88px; font-size: 44px; }
+  .endless-countdown.is-go > span:first-child { width: 100px; height: 100px; font-size: 31px; }
+  .endless-race-flag { top: -29px; right: -28px; font-size: 35px; }
+  .endless-choice-top { min-height: 62px; } .endless-choice-icon { width: 56px; height: 56px; font-size: 34px; }
+  .endless-choice-kind { margin-top: 9px; font-size: 7px; } .endless-choice strong { font-size: clamp(17px, 4vw, 23px); }
+  .endless-feedback { align-items: flex-start; padding: 10px 11px; } .endless-feedback .btn { padding: 10px 11px; font-size: 11px; }
   .daily-head { gap: 8px; margin-bottom: 15px; } .daily-head h2 { font-size: 27px; }
   .daily-head .count-tag { padding: 6px 8px; font-size: 8px; }
   .daily-question-strip { min-height: 78px; padding: 13px 14px; gap: 10px; }

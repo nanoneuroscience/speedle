@@ -32,6 +32,21 @@ let dailyCommunityStats = null;
 let dailyCommunityStatus = 'idle';
 let dailyCommunityError = '';
 let dailyCommunityRequestId = 0;
+let soloMode = localStorage.getItem('speedle-solo-mode') === 'endless' ? 'endless' : 'daily';
+let endlessDeckStatus = 'idle';
+let endlessDeck = [];
+let endlessError = '';
+let endlessUsedNames = new Set();
+let endlessPair = null;
+let endlessSelectedObject = null;
+let endlessRoundStatus = 'guessing';
+let endlessTarget = 'faster';
+let endlessIntroPhase = 'ready';
+let endlessReady = true;
+let endlessIntroTimer = null;
+let endlessScore = 0;
+let endlessBest = Number(localStorage.getItem('speedle-endless-best')) || 0;
+let endlessUnitSystem = localStorage.getItem('speedle-endless-units') === 'metric' ? 'metric' : 'imperial';
 const questionVisuals = {
   'Peregrine falcon': { icon: '🦅', speed: 240 }, 'Cheetah': { icon: '🐆', speed: 70 },
   'Sailfish': { icon: '🐟', speed: 68 }, 'Ostrich': { icon: '🦤', speed: 43 },
@@ -245,6 +260,193 @@ function bindDailyCard() {
     void refreshDailyCommunity(true);
   });
 }
+async function loadEndlessDeck() {
+  if (endlessDeckStatus === 'loading' || endlessDeckStatus === 'ready') return;
+  endlessDeckStatus = 'loading';
+  renderEndlessCard();
+  try {
+    const response = await fetch('/daily-deck.json', { cache: 'no-store' });
+    if (!response.ok) throw new Error('Could not load the speed deck.');
+    const deck = await response.json();
+    endlessDeck = Array.isArray(deck) ? deck.filter(item => item && item.name && Number.isFinite(Number(item.speed))) : [];
+    if (endlessDeck.length < 2) throw new Error('The speed deck needs at least two objects.');
+    endlessDeckStatus = 'ready';
+    if (!endlessPair) startEndlessGame();
+  } catch (error) {
+    endlessDeckStatus = 'error';
+    endlessError = error.message;
+    renderEndlessCard();
+  }
+}
+function shuffled(items) {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+function drawEndlessPair() {
+  let available = endlessDeck.filter(item => !endlessUsedNames.has(item.name));
+  if (available.length < 2) {
+    endlessUsedNames = new Set();
+    available = endlessDeck;
+  }
+  const ordered = shuffled(available);
+  const first = ordered[0];
+  let second = ordered.find(item => Number(item.speed) !== Number(first.speed));
+  if (!second) {
+    endlessUsedNames = new Set();
+    const fullDeck = shuffled(endlessDeck);
+    const fallbackFirst = fullDeck[0];
+    second = fullDeck.find(item => Number(item.speed) !== Number(fallbackFirst.speed));
+    if (!second) {
+      endlessDeckStatus = 'error';
+      endlessError = 'Could not find two objects with different speeds.';
+      endlessPair = null;
+      return;
+    }
+    endlessUsedNames.add(fallbackFirst.name);
+    endlessUsedNames.add(second.name);
+    endlessPair = shuffled([fallbackFirst, second]);
+    endlessSelectedObject = null;
+    endlessTarget = Math.random() < .5 ? 'faster' : 'slower';
+    endlessRoundStatus = 'guessing';
+    endlessIntroPhase = 'left';
+    endlessReady = false;
+    return;
+  }
+  endlessUsedNames.add(first.name);
+  endlessUsedNames.add(second.name);
+  endlessPair = shuffled([first, second]);
+  endlessSelectedObject = null;
+  endlessTarget = Math.random() < .5 ? 'faster' : 'slower';
+  endlessRoundStatus = 'guessing';
+  endlessIntroPhase = 'left';
+  endlessReady = false;
+}
+function startEndlessGame() {
+  if (endlessDeckStatus !== 'ready') return;
+  clearTimeout(endlessIntroTimer);
+  endlessScore = 0;
+  endlessUsedNames = new Set();
+  endlessError = '';
+  drawEndlessPair();
+  renderEndlessCard();
+  runEndlessIntro();
+}
+function runEndlessIntro() {
+  clearTimeout(endlessIntroTimer);
+  const sequence = [['vs', 500], ['right', 450], ['three', 520], ['two', 520], ['one', 520], ['go', 650], ['ready', 0]];
+  let step = 0;
+  function advance() {
+    if (step >= sequence.length) return;
+    const [phase, delay] = sequence[step++];
+    endlessIntroPhase = phase;
+    endlessReady = phase === 'ready';
+    renderEndlessCard();
+    if (delay) endlessIntroTimer = setTimeout(advance, delay);
+  }
+  endlessIntroTimer = setTimeout(advance, 560);
+}
+function chooseEndlessObject(index) {
+  if (!endlessPair || !endlessReady || endlessRoundStatus !== 'guessing') return;
+  const chosen = endlessPair[index];
+  const faster = endlessPair[0].speed > endlessPair[1].speed ? endlessPair[0] : endlessPair[1];
+  const slower = endlessPair.find(item => item !== faster);
+  const target = endlessTarget === 'faster' ? faster : slower;
+  if (chosen === target) {
+    endlessScore += 1;
+    if (endlessScore > endlessBest) {
+      endlessBest = endlessScore;
+      localStorage.setItem('speedle-endless-best', String(endlessBest));
+    }
+    endlessRoundStatus = 'correct';
+  } else {
+    endlessRoundStatus = 'over';
+  }
+  renderEndlessCard();
+}
+function endlessPanel() {
+  if (endlessDeckStatus === 'idle' || endlessDeckStatus === 'loading') return `<div class="daily-loading"><span class="spinner"></span> Loading the speed deck…</div>`;
+  if (endlessDeckStatus === 'error') return `<div class="daily-loading"><p>${escapeHtml(endlessError || 'Could not load the speed deck.')}</p><button class="btn btn-primary btn-full" id="endless-retry">Try again</button></div>`;
+  if (!endlessPair) return `<div class="daily-loading"><p>Couldn’t find a new pair. Try again.</p><button class="btn btn-primary btn-full" id="endless-restart">Start again</button></div>`;
+  const answered = endlessRoundStatus !== 'guessing';
+  const faster = endlessPair[0].speed > endlessPair[1].speed ? endlessPair[0] : endlessPair[1];
+  const slower = endlessPair.find(item => item !== faster);
+  const target = endlessTarget === 'faster' ? faster : slower;
+  const title = endlessRoundStatus === 'correct' ? 'That’s right!' : endlessRoundStatus === 'over' ? 'Run over' : `Which is ${endlessTarget}?`;
+  const message = endlessRoundStatus === 'correct'
+    ? `${escapeHtml(target.name)} is ${endlessTarget}. Keep the streak going.`
+    : endlessRoundStatus === 'over'
+      ? `${escapeHtml(target.name)} was ${endlessTarget}. Your streak ends at ${endlessScore}.`
+      : `Pick the object that’s ${endlessTarget}.`;
+  const choices = endlessPair.map((item, index) => {
+    const isFaster = item === faster;
+    const selected = answered && item === endlessSelectedObject;
+    const classNames = ['endless-choice'];
+    const phaseIndex = ['left', 'vs', 'right', 'three', 'two', 'one', 'go', 'ready'].indexOf(endlessIntroPhase);
+    if (index === 0) classNames.push(phaseIndex === 0 ? 'endless-enter-left' : 'endless-visible');
+    else classNames.push(phaseIndex < 2 ? 'endless-hidden' : phaseIndex === 2 ? 'endless-enter-right' : 'endless-visible');
+    if (answered && isFaster) classNames.push('is-faster');
+    if (selected && endlessRoundStatus === 'over') classNames.push('is-picked-wrong');
+    const badge = answered ? `<span class="endless-answer-badge">${isFaster ? 'FASTER' : 'SLOWER'}</span>` : '';
+    const speed = answered ? `<span class="endless-speed">${displaySpeed(item.speed, endlessUnitSystem)} <small>${unitShort(endlessUnitSystem)}</small></span>` : `<span class="endless-pick-hint">Choose this one</span>`;
+    const label = answered ? `${item.name}: ${displaySpeed(item.speed, endlessUnitSystem)} ${unitShort(endlessUnitSystem)}` : `Choose ${item.name} as the ${endlessTarget} object`;
+    return `<button class="${classNames.join(' ')}" type="button" data-endless-choice="${index}" aria-label="${escapeHtml(label)}" ${answered || !endlessReady ? 'disabled' : ''}><span class="endless-choice-top">${badge}<span class="endless-choice-icon" aria-hidden="true">${escapeHtml(item.icon || '⚡')}</span></span><span class="endless-choice-kind">${escapeHtml(item.kind || 'OBJECT')}</span><strong>${escapeHtml(item.name)}</strong>${speed}</button>`;
+  }).join('');
+  const phaseIndex = ['left', 'vs', 'right', 'three', 'two', 'one', 'go', 'ready'].indexOf(endlessIntroPhase);
+  const countdownText = { three: '3', two: '2', one: '1', go: 'GO!' }[endlessIntroPhase];
+  const vsClass = endlessIntroPhase === 'vs' ? 'is-entering' : 'is-visible';
+  const vs = phaseIndex >= 1 ? `<div class="endless-vs ${vsClass}" aria-hidden="true">VS</div>` : '';
+  const flag = endlessIntroPhase === 'go' ? '<span class="endless-race-flag" aria-hidden="true">🏁</span>' : '';
+  const countdown = countdownText ? `<div class="endless-countdown ${endlessIntroPhase === 'go' ? 'is-go' : ''}" role="status" aria-live="assertive"><span>${countdownText}</span>${flag}</div>` : '';
+  const resultClass = endlessRoundStatus === 'correct' ? 'is-correct' : endlessRoundStatus === 'over' ? 'is-over' : '';
+  const action = endlessRoundStatus === 'correct'
+    ? '<button class="btn btn-primary" id="endless-next">Next pair <span aria-hidden="true">→</span></button>'
+    : endlessRoundStatus === 'over'
+      ? '<button class="btn btn-primary" id="endless-restart">Play again</button>'
+      : '';
+  const readyFlag = !answered && endlessReady ? '<span class="endless-ready-flag" aria-hidden="true">🏁</span>' : '';
+  return `<div class="endless-head"><div><h2>Endless Speedle</h2><p>Compare two objects. Keep your streak alive.</p></div><label class="endless-unit-control"><span class="field-label">SPEED UNITS</span><select class="input" id="endless-unit-system" aria-label="Endless game speed units" ${endlessReady ? '' : 'disabled'}><option value="imperial" ${endlessUnitSystem === 'imperial' ? 'selected' : ''}>MPH</option><option value="metric" ${endlessUnitSystem === 'metric' ? 'selected' : ''}>KM/H</option></select></label></div><div class="endless-scoreboard"><div><strong>${endlessScore}</strong><span>STREAK</span></div><div><strong>${endlessBest}</strong><span>BEST</span></div><span class="endless-round-prompt">${readyFlag}${answered ? 'SPEEDS REVEALED' : endlessReady ? `PICK THE ${endlessTarget.toUpperCase()} OBJECT` : 'GET READY'}</span></div><div class="endless-stage" data-phase="${escapeHtml(endlessIntroPhase)}"><div class="endless-pair">${choices}</div>${vs}${countdown}</div><div class="endless-feedback ${resultClass}" aria-live="polite"><div><strong>${title}</strong><span>${answered ? message : endlessReady ? message : 'Wait for GO! to make your pick.'}</span></div>${action}</div>`;
+}
+function renderEndlessCard() {
+  const content = view.querySelector('#endless-challenge-content');
+  if (!content || state) return;
+  content.innerHTML = endlessPanel();
+  view.querySelector('#endless-retry')?.addEventListener('click', () => {
+    endlessDeckStatus = 'idle'; endlessError = ''; void loadEndlessDeck();
+  });
+  view.querySelector('#endless-restart')?.addEventListener('click', startEndlessGame);
+  view.querySelector('#endless-next')?.addEventListener('click', () => {
+    drawEndlessPair();
+    renderEndlessCard();
+    runEndlessIntro();
+  });
+  view.querySelector('#endless-unit-system')?.addEventListener('change', event => {
+    endlessUnitSystem = event.currentTarget.value;
+    localStorage.setItem('speedle-endless-units', endlessUnitSystem);
+    renderEndlessCard();
+  });
+  view.querySelectorAll('[data-endless-choice]').forEach(button => button.addEventListener('click', () => {
+    endlessSelectedObject = endlessPair[Number(button.dataset.endlessChoice)];
+    chooseEndlessObject(Number(button.dataset.endlessChoice));
+  }));
+}
+function setSoloMode(mode) {
+  soloMode = mode === 'endless' ? 'endless' : 'daily';
+  localStorage.setItem('speedle-solo-mode', soloMode);
+  const dailyContent = view.querySelector('#daily-challenge-content');
+  const endlessContent = view.querySelector('#endless-challenge-content');
+  dailyContent?.classList.toggle('hidden', soloMode !== 'daily');
+  endlessContent?.classList.toggle('hidden', soloMode !== 'endless');
+  view.querySelectorAll('[data-solo-mode]').forEach(button => {
+    const active = button.dataset.soloMode === soloMode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+  if (soloMode === 'endless') void loadEndlessDeck();
+}
 function speedToRunnerRate(speed, range) {
   const ratio = range > 0 ? Math.max(0, Math.min(1, speed / range)) : 0;
   return speed <= 0 ? 0 : 0.65 * (0.18 + 1.32 * ratio);
@@ -409,7 +611,7 @@ function createLanding() {
   view.innerHTML = `<section class="landing">
     <div class="hero-copy"><div class="eyebrow"><span class="bar"></span> A SPEED GUESSING SHOWDOWN</div><h1>Speedle.</h1>
       <p class="hero-sub">From hummingbirds to jet planes, do you really know how fast they go? Guess. Survive. Outrun the group and win.</p>
-      <div class="hero-pitches"><div class="hero-pitch"><span>WITH FRIENDS</span><strong>Challenge your friends</strong><p>Join a room and see who can outlast the group.</p></div><div class="hero-pitch"><span>ON YOUR OWN</span><strong>Train with Daily Speedle</strong><p>Play today’s solo guess and sharpen your speed sense.</p></div></div>
+      <div class="hero-pitches"><div class="hero-pitch"><span>WITH FRIENDS</span><strong>Challenge your friends</strong><p>Join a room and see who can outlast the group.</p></div><div class="hero-pitch"><span>ON YOUR OWN</span><strong>Train with Daily Speedle</strong><p>Play today’s solo guess or take on Endless Speedle.</p></div></div>
     </div>
     <div class="entry-card"><div class="tabs"><button class="tab ${selectedTab === 'create' ? 'active' : ''}" data-tab="create">Create a room</button><button class="tab ${selectedTab === 'join' ? 'active' : ''}" data-tab="join">Join a room</button></div>
       <form id="entry-form"><div class="form-row"><label class="field-label" for="player-name">YOUR NAME</label><input id="player-name" class="input" placeholder="What should we call you?" maxlength="18" autocomplete="nickname" required /></div>
@@ -418,7 +620,7 @@ function createLanding() {
       <p class="hint">${selectedTab === 'create' ? 'You’ll get a code to share. Friends can join from any phone on the same Wi-Fi.' : inviteRoomCode ? 'You were invited to a room. Add your name and jump in.' : 'Ask your host for their room code and join the lobby.'}</p>
     </div>
   </section><section class="rules"><div class="rule"><span class="rule-no">01</span><strong>Pick your speed</strong><span>Slide to your best guess of the object’s top speed.</span></div><div class="rule"><span class="rule-no">02</span><strong>Protect your health</strong><span>Miss by more, lose more. Damage is capped at 100 HP each round.</span></div><div class="rule"><span class="rule-no">03</span><strong>Stay in the race</strong><span>Hit zero and you’re out. Last one standing wins.</span></div></section>
-  <section class="daily-section"><div class="daily-game-panel panel"><div id="daily-challenge-content">${dailyPanel()}</div></div></section>`;
+  <section class="daily-section"><div class="daily-game-panel panel"><div class="solo-mode-tabs" role="tablist" aria-label="Solo game modes"><button class="solo-mode-tab ${soloMode === 'daily' ? 'active' : ''}" type="button" role="tab" data-solo-mode="daily" aria-selected="${soloMode === 'daily'}">Daily Speedle</button><button class="solo-mode-tab ${soloMode === 'endless' ? 'active' : ''}" type="button" role="tab" data-solo-mode="endless" aria-selected="${soloMode === 'endless'}">Endless</button></div><div id="daily-challenge-content" class="${soloMode === 'daily' ? '' : 'hidden'}">${dailyPanel()}</div><div id="endless-challenge-content" class="${soloMode === 'endless' ? '' : 'hidden'}">${endlessPanel()}</div></div></section>`;
   const roomCodeInput = view.querySelector('#room-code-input');
   if (inviteRoomCode && roomCodeInput) roomCodeInput.value = inviteRoomCode;
   view.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => {
@@ -428,6 +630,7 @@ function createLanding() {
     history.replaceState({}, '', selectedTab === 'join' && inviteRoomCode ? `/?room=${inviteRoomCode}` : '/');
     createLanding();
   }));
+  view.querySelectorAll('[data-solo-mode]').forEach(button => button.addEventListener('click', () => setSoloMode(button.dataset.soloMode)));
   view.querySelector('#entry-form')?.addEventListener('submit', async event => {
     event.preventDefault(); const name = view.querySelector('#player-name').value.trim();
     try {
@@ -437,6 +640,7 @@ function createLanding() {
   });
   renderDailyCard();
   loadDailyChallenge();
+  setSoloMode(soloMode);
 }
 function healthList(players) {
   const heartPath = 'M50 88C46 84 8 60 8 34C8 18 19 8 34 8C42 8 48 12 50 20C52 12 58 8 66 8C81 8 92 18 92 34C92 60 54 84 50 88Z';
