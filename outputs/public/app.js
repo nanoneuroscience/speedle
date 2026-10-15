@@ -158,15 +158,19 @@ function dailyCommunityPanel() {
   if (dailyCommunityStatus === 'loading' || dailyCommunityStatus === 'idle') return `<section class="daily-community" aria-live="polite">${header}<div class="community-message"><span class="spinner"></span> Adding your anonymous score…</div></section>`;
   if (dailyCommunityStatus === 'error') return `<section class="daily-community" aria-live="polite">${header}<div class="community-message"><span>${escapeHtml(dailyCommunityError || 'Could not load community scores.')}</span><button class="btn community-retry" id="daily-community-retry" type="button">Try again</button></div></section>`;
   const stats = dailyCommunityStats;
-  if (!stats || stats.playerCount === 0) return `<section class="daily-community" aria-live="polite">${header}<div class="community-message">You’re the first today. Your score will appear in the curve other players see.</div></section>`;
-  const max = Math.max(1, ...stats.buckets);
+  const totalScores = stats?.buckets?.reduce((sum, count) => sum + count, 0) || 0;
+  if (!stats || totalScores === 0) return `<section class="daily-community" aria-live="polite">${header}<div class="community-message">The community distribution will appear here as results come in.</div></section>`;
+  const shares = stats.buckets.map(count => count / totalScores);
+  const maxShare = Math.max(...shares);
   const userBucket = Math.min(9, Math.floor(stats.myAccuracy / 10));
   const bars = stats.buckets.map((count, index) => {
-    const height = count ? Math.max(5, Math.round(count / max * 100)) : 0;
+    const share = shares[index];
+    const height = count ? Math.max(5, Math.round(share / maxShare * 100)) : 0;
+    const shareLabel = share ? `${share * 100 < 10 ? (share * 100).toFixed(1) : Math.round(share * 100)}%` : '';
     const label = index === 9 ? '90–100' : `${index * 10}–${index * 10 + 9}`;
-    return `<div class="community-bin ${index === userBucket ? 'is-your-score' : ''}" title="${label}% accuracy: ${count} players"><span class="community-bin-count">${count || ''}</span><div class="community-bar-track"><i style="height:${height}%"></i></div><span class="community-bin-label">${label}</span></div>`;
+    return `<div class="community-bin ${index === userBucket ? 'is-your-score' : ''}" title="${label}% accuracy: ${shareLabel} of scores"><span class="community-bin-share">${shareLabel}</span><div class="community-bar-track"><i style="height:${height}%"></i></div><span class="community-bin-label">${label}</span></div>`;
   }).join('');
-  return `<section class="daily-community" aria-live="polite">${header}<div class="community-stats"><div><strong>${stats.playerCount}</strong><span>OTHER PLAYERS</span></div><div><strong>${stats.averageAccuracy}%</strong><span>AVERAGE</span></div><div><strong>${stats.percentile}%</strong><span>BEAT</span></div></div><div class="community-chart" role="img" aria-label="Accuracy distribution for ${stats.playerCount} other players. Your score is ${stats.myAccuracy} percent.">${bars}</div><div class="community-axis-note"><span>ACCURACY SCORE</span><span class="community-your-key"><i></i> YOUR SCORE RANGE</span></div></section>`;
+  return `<section class="daily-community" aria-live="polite">${header}<div class="community-stats"><div><strong>${stats.averageAccuracy}%</strong><span>AVERAGE ACCURACY</span></div><div><strong>${stats.percentile}%</strong><span>BEAT</span></div></div><div class="community-chart" role="img" aria-label="Normalized accuracy distribution. Your score is ${stats.myAccuracy} percent.">${bars}</div><div class="community-axis-note"><span>ACCURACY SCORE · SHARE OF SCORES</span><span class="community-your-key"><i></i> YOUR SCORE RANGE</span></div></section>`;
 }
 function dailyPanel() {
   if (dailyDeckStatus === 'loading' || dailyDeckStatus === 'idle') return `<div class="daily-loading"><span class="spinner"></span> Loading today’s shared challenge…</div>`;

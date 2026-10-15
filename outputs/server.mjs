@@ -233,7 +233,7 @@ function dailyScoreSummary(day, currentParticipantHash) {
   const below = others.filter(score => score < currentScore).length;
   const tied = others.filter(score => score === currentScore).length;
   const percentile = others.length ? Math.round((below + tied / 2) / others.length * 100) : null;
-  return { day, myAccuracy: currentScore, playerCount: others.length, averageAccuracy, percentile, buckets };
+  return { day, myAccuracy: currentScore, averageAccuracy, percentile, buckets };
 }
 async function readJsonBody(req, limit = 4096) {
   let body = '';

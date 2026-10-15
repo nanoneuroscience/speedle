@@ -88,13 +88,13 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: -.055em; }
 .community-refresh { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 50%; background: #f7f7f2; color: var(--ink); font: 20px/1 var(--sans); cursor: pointer; }
 .community-refresh:hover { background: #edf1e6; }
 .community-refresh:disabled { opacity: .45; cursor: wait; }
-.community-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 15px; }
+.community-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 15px; }
 .community-stats > div { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 7px; background: #f3f3ed; }
 .community-stats strong { font: 600 18px/1 var(--mono); }
 .community-stats span { color: var(--muted); font: 500 7px var(--mono); letter-spacing: .08em; }
 .community-chart { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); align-items: end; gap: 8px; height: 126px; margin-top: 15px; padding: 0 2px; }
 .community-bin { display: grid; grid-template-rows: 17px 1fr 15px; align-items: end; height: 100%; min-width: 0; text-align: center; }
-.community-bin-count { color: #829087; font: 8px var(--mono); }
+.community-bin-share { color: #829087; font: 7px var(--mono); white-space: nowrap; }
 .community-bar-track { position: relative; width: min(100%, 24px); height: 86px; justify-self: center; overflow: hidden; border-radius: 4px 4px 2px 2px; background: #f0f1eb; }
 .community-bar-track i { position: absolute; right: 0; bottom: 0; left: 0; display: block; border-radius: 4px 4px 0 0; background: #afc28d; }
 .community-bin.is-your-score .community-bar-track i { background: var(--orange); }
