@@ -188,6 +188,7 @@ function dailyPanel() {
     : `<div class="daily-control-row"><div class="daily-unit-row"><label class="field-label" for="daily-unit-system">SPEED UNITS</label><select class="input daily-unit-select" id="daily-unit-system" aria-label="Daily guess speed units"><option value="imperial" ${dailyUnitSystem === 'imperial' ? 'selected' : ''}>Imperial · MPH</option><option value="metric" ${dailyUnitSystem === 'metric' ? 'selected' : ''}>Metric · KM/H</option></select></div><div class="guess-control daily-guess-control"><div class="guess-top"><label for="daily-guess-slider">SET YOUR GUESSED SPEED</label><div class="guess-number"><span id="daily-guess-readout">${value}</span> <small>${unitLabel(dailyUnitSystem)}</small></div></div><div class="range-wrap"><input class="range" id="daily-guess-slider" type="range" min="0" max="${max}" value="${value}" step="1" style="--progress:${value / max * 100}%" aria-label="Set your daily speed guess in ${dailyUnitSystem === 'metric' ? 'kilometres per hour' : 'miles per hour'}"/></div><div class="range-labels"><span>0 ${unitShort(dailyUnitSystem)}</span><span>${max} ${unitShort(dailyUnitSystem)}</span></div></div><button class="btn btn-primary daily-submit" id="daily-submit">Reveal today’s speed</button></div>`;
   return `<div class="daily-head"><div><h2>Daily Speedle</h2></div><span class="count-tag">${escapeHtml(formattedDate)}</span></div>
     <div class="daily-question-strip"><div><div class="eyebrow">${escapeHtml(question.kind)}</div><h3>${escapeHtml(question.name)}</h3><p>${result ? escapeHtml(displaySpeedNote(question.note, resultUnit)) : 'What’s its top speed?'}</p></div>${questionImageMarkup(question, 'daily-question-image')}</div>
+    <div class="daily-question-credit" id="daily-question-credit"></div>
     <div class="daily-lanes-wrap">${speedLanes(question, shownGuess, Boolean(result), resultUnit)}</div>${resultContent}`;
 }
 function renderDailyCard() {
@@ -309,7 +310,12 @@ function renderQuestionImage(name, containerId = 'question-image') {
   img.loading = 'lazy';
   img.referrerPolicy = 'no-referrer';
   img.className = 'question-image';
-  img.addEventListener('error', () => { container.replaceChildren(); container.classList.add('image-unavailable'); }, { once: true });
+  const isDailyImage = containerId === 'daily-question-image';
+  img.addEventListener('error', () => {
+    container.replaceChildren();
+    container.classList.add('image-unavailable');
+    if (isDailyImage) view.querySelector('#daily-question-credit')?.replaceChildren();
+  }, { once: true });
   const caption = document.createElement('div');
   caption.className = 'image-credit';
   if (image.pageUrl) {
@@ -320,7 +326,12 @@ function renderQuestionImage(name, containerId = 'question-image') {
     source.textContent = `Image source: ${image.pageTitle}${image.credit ? ` · ${image.credit}` : ''}${image.license ? ` · ${image.license}` : ''}`;
     caption.append(source);
   }
-  container.replaceChildren(img, caption);
+  if (isDailyImage) {
+    container.replaceChildren(img);
+    view.querySelector('#daily-question-credit')?.replaceChildren(caption);
+  } else {
+    container.replaceChildren(img, caption);
+  }
   container.classList.remove('image-unavailable');
 }
 function questionImageMarkup(question, containerId = 'question-image') {

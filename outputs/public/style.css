@@ -57,7 +57,9 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: -.055em; }
 .daily-question-image { flex: 0 0 clamp(190px, 26vw, 280px); width: clamp(190px, 26vw, 280px); min-height: 0; justify-items: center; gap: 8px; margin: 0; padding: 10px; border-radius: 16px; background: #e3e5dc; }
 .daily-question-image .question-image { width: 100%; height: 200px; max-height: 200px; object-fit: cover; border-radius: 9px; }
 .daily-question-image .image-loading { max-width: 100%; color: #73816a; text-align: center; font-size: 8px; }
-.daily-question-image .image-credit { max-width: 100%; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; font-size: 7px; }
+.daily-question-credit { display: flex; justify-content: flex-end; min-height: 12px; margin: 5px 4px 0; }
+.daily-question-credit .image-credit { max-width: 100%; overflow: hidden; color: #7d887e; text-align: right; text-overflow: ellipsis; white-space: nowrap; font: 8px/1.4 var(--mono); }
+.daily-question-credit .image-credit a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .daily-lanes-wrap { margin-top: 18px; }
 .daily-lanes-wrap .answer-lane .lane-heading { display: none; }
 .daily-lanes-wrap .guess-lane .lane-heading strong { display: none; }
