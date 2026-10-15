@@ -40,7 +40,6 @@ let endlessUsedNames = new Set();
 let endlessPair = null;
 let endlessSelectedObject = null;
 let endlessRoundStatus = 'guessing';
-let endlessTarget = 'faster';
 let endlessIntroPhase = 'ready';
 let endlessReady = true;
 let endlessIntroTimer = null;
@@ -310,7 +309,6 @@ function drawEndlessPair() {
     endlessUsedNames.add(second.name);
     endlessPair = shuffled([fallbackFirst, second]);
     endlessSelectedObject = null;
-    endlessTarget = Math.random() < .5 ? 'faster' : 'slower';
     endlessRoundStatus = 'guessing';
     endlessIntroPhase = 'left';
     endlessReady = false;
@@ -320,7 +318,6 @@ function drawEndlessPair() {
   endlessUsedNames.add(second.name);
   endlessPair = shuffled([first, second]);
   endlessSelectedObject = null;
-  endlessTarget = Math.random() < .5 ? 'faster' : 'slower';
   endlessRoundStatus = 'guessing';
   endlessIntroPhase = 'left';
   endlessReady = false;
@@ -353,8 +350,7 @@ function chooseEndlessObject(index) {
   if (!endlessPair || !endlessReady || endlessRoundStatus !== 'guessing') return;
   const chosen = endlessPair[index];
   const faster = endlessPair[0].speed > endlessPair[1].speed ? endlessPair[0] : endlessPair[1];
-  const slower = endlessPair.find(item => item !== faster);
-  const target = endlessTarget === 'faster' ? faster : slower;
+  const target = faster;
   if (chosen === target) {
     endlessScore += 1;
     if (endlessScore > endlessBest) {
@@ -373,14 +369,13 @@ function endlessPanel() {
   if (!endlessPair) return `<div class="daily-loading"><p>Couldn’t find a new pair. Try again.</p><button class="btn btn-primary btn-full" id="endless-restart">Start again</button></div>`;
   const answered = endlessRoundStatus !== 'guessing';
   const faster = endlessPair[0].speed > endlessPair[1].speed ? endlessPair[0] : endlessPair[1];
-  const slower = endlessPair.find(item => item !== faster);
-  const target = endlessTarget === 'faster' ? faster : slower;
-  const title = endlessRoundStatus === 'correct' ? 'That’s right!' : endlessRoundStatus === 'over' ? 'Run over' : `Which is ${endlessTarget}?`;
+  const target = faster;
+  const title = endlessRoundStatus === 'correct' ? 'That’s right!' : endlessRoundStatus === 'over' ? 'Run over' : 'Which is faster?';
   const message = endlessRoundStatus === 'correct'
-    ? `${escapeHtml(target.name)} is ${endlessTarget}. Keep the streak going.`
+    ? `${escapeHtml(target.name)} is faster. Keep the streak going.`
     : endlessRoundStatus === 'over'
-      ? `${escapeHtml(target.name)} was ${endlessTarget}. Your streak ends at ${endlessScore}.`
-      : `Pick the object that’s ${endlessTarget}.`;
+      ? `${escapeHtml(target.name)} was faster. Your streak ends at ${endlessScore}.`
+      : 'Pick the faster object.';
   const choices = endlessPair.map((item, index) => {
     const isFaster = item === faster;
     const selected = answered && item === endlessSelectedObject;
@@ -392,7 +387,7 @@ function endlessPanel() {
     if (selected && endlessRoundStatus === 'over') classNames.push('is-picked-wrong');
     const badge = answered ? `<span class="endless-answer-badge">${isFaster ? 'FASTER' : 'SLOWER'}</span>` : '';
     const speed = answered ? `<span class="endless-speed">${displaySpeed(item.speed, endlessUnitSystem)} <small>${unitShort(endlessUnitSystem)}</small></span>` : `<span class="endless-pick-hint">Choose this one</span>`;
-    const label = answered ? `${item.name}: ${displaySpeed(item.speed, endlessUnitSystem)} ${unitShort(endlessUnitSystem)}` : `Choose ${item.name} as the ${endlessTarget} object`;
+    const label = answered ? `${item.name}: ${displaySpeed(item.speed, endlessUnitSystem)} ${unitShort(endlessUnitSystem)}` : `Choose ${item.name} as the faster object`;
     return `<button class="${classNames.join(' ')}" type="button" data-endless-choice="${index}" aria-label="${escapeHtml(label)}" ${answered || !endlessReady ? 'disabled' : ''}><span class="endless-choice-top">${badge}<span class="endless-choice-icon" aria-hidden="true">${escapeHtml(item.icon || '⚡')}</span></span><span class="endless-choice-kind">${escapeHtml(item.kind || 'OBJECT')}</span><strong>${escapeHtml(item.name)}</strong>${speed}</button>`;
   }).join('');
   const phaseIndex = ['left', 'vs', 'right', 'three', 'two', 'one', 'go', 'ready'].indexOf(endlessIntroPhase);
@@ -408,7 +403,7 @@ function endlessPanel() {
       ? '<button class="btn btn-primary" id="endless-restart">Play again</button>'
       : '';
   const readyFlag = !answered && endlessReady ? '<span class="endless-ready-flag" aria-hidden="true">🏁</span>' : '';
-  return `<div class="endless-head"><div><h2>Endless Speedle</h2><p>Compare two objects. Keep your streak alive.</p></div><label class="endless-unit-control"><span class="field-label">SPEED UNITS</span><select class="input" id="endless-unit-system" aria-label="Endless game speed units" ${endlessReady ? '' : 'disabled'}><option value="imperial" ${endlessUnitSystem === 'imperial' ? 'selected' : ''}>MPH</option><option value="metric" ${endlessUnitSystem === 'metric' ? 'selected' : ''}>KM/H</option></select></label></div><div class="endless-scoreboard"><div><strong>${endlessScore}</strong><span>STREAK</span></div><div><strong>${endlessBest}</strong><span>BEST</span></div><span class="endless-round-prompt">${readyFlag}${answered ? 'SPEEDS REVEALED' : endlessReady ? `PICK THE ${endlessTarget.toUpperCase()} OBJECT` : 'GET READY'}</span></div><div class="endless-stage" data-phase="${escapeHtml(endlessIntroPhase)}"><div class="endless-pair">${choices}</div>${vs}${countdown}</div><div class="endless-feedback ${resultClass}" aria-live="polite"><div><strong>${title}</strong><span>${answered ? message : endlessReady ? message : 'Wait for GO! to make your pick.'}</span></div>${action}</div>`;
+  return `<div class="endless-head"><div><h2>Endless Speedle</h2><p>Choose the faster object. Keep your streak alive.</p></div><label class="endless-unit-control"><span class="field-label">SPEED UNITS</span><select class="input" id="endless-unit-system" aria-label="Endless game speed units" ${endlessReady ? '' : 'disabled'}><option value="imperial" ${endlessUnitSystem === 'imperial' ? 'selected' : ''}>MPH</option><option value="metric" ${endlessUnitSystem === 'metric' ? 'selected' : ''}>KM/H</option></select></label></div><div class="endless-scoreboard"><div><strong>${endlessScore}</strong><span>STREAK</span></div><div><strong>${endlessBest}</strong><span>BEST</span></div><span class="endless-round-prompt">${readyFlag}${answered ? 'SPEEDS REVEALED' : endlessReady ? 'PICK THE FASTER OBJECT' : 'GET READY'}</span></div><div class="endless-stage" data-phase="${escapeHtml(endlessIntroPhase)}"><div class="endless-pair">${choices}</div>${vs}${countdown}</div><div class="endless-feedback ${resultClass}" aria-live="polite"><div><strong>${title}</strong><span>${answered ? message : endlessReady ? message : 'Wait for GO! to make your pick.'}</span></div>${action}</div>`;
 }
 function renderEndlessCard() {
   const content = view.querySelector('#endless-challenge-content');

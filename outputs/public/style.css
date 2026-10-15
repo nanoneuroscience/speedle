@@ -64,7 +64,7 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: -.055em; }
 .endless-scoreboard .endless-round-prompt { justify-self: end; color: #728169; }
 .endless-ready-flag { display: inline-block; margin-right: 5px; font-size: 13px; vertical-align: -2px; }
 .endless-stage { position: relative; }
-.endless-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+.endless-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 96px; }
 .endless-choice { display: flex; min-width: 0; min-height: 230px; flex-direction: column; align-items: flex-start; padding: 17px 20px 18px; border: 1px solid #e1e5dc; border-radius: 10px; background: var(--white); color: var(--ink); text-align: left; cursor: pointer; transition: transform .16s, border-color .16s, background .16s, box-shadow .16s; }
 .endless-choice.endless-hidden { visibility: hidden; opacity: 0; transform: translateX(18px) scale(.96); pointer-events: none; }
 .endless-choice.endless-visible { visibility: visible; opacity: 1; transform: none; }
@@ -363,7 +363,7 @@ select.input { appearance: none; -webkit-appearance: none; padding-right: 38px; 
   .endless-unit-control { min-width: 94px; } .endless-unit-control .input { height: 36px; font-size: 11px; }
   .endless-scoreboard { grid-template-columns: 1fr 1fr; gap: 8px 10px; margin: 15px 0 11px; padding: 10px 12px; }
   .endless-scoreboard .endless-round-prompt { grid-column: 1 / -1; justify-self: start; font-size: 8px; }
-  .endless-pair { gap: 9px; } .endless-choice { min-height: 195px; padding: 13px 13px 14px; }
+  .endless-pair { gap: 70px; } .endless-choice { min-height: 195px; padding: 13px 13px 14px; }
   .endless-vs { width: 60px; height: 60px; border-width: 4px; font-size: 19px; }
   .endless-countdown > span:first-child { width: 88px; height: 88px; font-size: 44px; }
   .endless-countdown.is-go > span:first-child { width: 100px; height: 100px; font-size: 31px; }
@@ -424,6 +424,11 @@ select.input { appearance: none; -webkit-appearance: none; padding-right: 38px; 
   .result-row .result-guess { grid-column: 1; grid-row: 2; font-size: 9px; }
   .result-row .damage { grid-column: 2; grid-row: 2; justify-self: end; font-size: 9px; }
   .winner-panel h2 { font-size: 36px; }
+}
+@media (max-width: 380px) {
+  .endless-pair { gap: 48px; }
+  .endless-vs { width: 42px; height: 42px; border-width: 3px; font-size: 14px; }
+  .endless-choice { padding-right: 9px; padding-left: 9px; }
 }
 @media (min-width: 681px) and (max-height: 900px) {
   .topbar { height: 62px; }
