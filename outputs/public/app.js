@@ -184,12 +184,17 @@ function dailyPanel() {
     : `<div class="daily-control-row"><div class="daily-unit-row"><label class="field-label" for="daily-unit-system">SPEED UNITS</label><select class="input daily-unit-select" id="daily-unit-system" aria-label="Daily guess speed units"><option value="imperial" ${dailyUnitSystem === 'imperial' ? 'selected' : ''}>Imperial · MPH</option><option value="metric" ${dailyUnitSystem === 'metric' ? 'selected' : ''}>Metric · KM/H</option></select></div><div class="guess-control daily-guess-control"><div class="guess-top"><label for="daily-guess-slider">SET YOUR GUESSED SPEED</label><div class="guess-number"><span id="daily-guess-readout">${value}</span> <small>${unitLabel(dailyUnitSystem)}</small></div></div><div class="range-wrap"><input class="range" id="daily-guess-slider" type="range" min="0" max="${max}" value="${value}" step="1" style="--progress:${value / max * 100}%" aria-label="Set your daily speed guess in ${dailyUnitSystem === 'metric' ? 'kilometres per hour' : 'miles per hour'}"/></div><div class="range-labels"><span>0 ${unitShort(dailyUnitSystem)}</span><span>${max} ${unitShort(dailyUnitSystem)}</span></div></div><button class="btn btn-primary daily-submit" id="daily-submit">Reveal today’s speed</button></div>`;
   return `<div class="daily-head"><div><h2>Daily Speedle</h2></div><span class="count-tag">${escapeHtml(formattedDate)}</span></div>
     <div class="daily-question-strip"><div><div class="eyebrow">${escapeHtml(question.kind)}</div><h3>${escapeHtml(question.name)}</h3><p>${result ? escapeHtml(displaySpeedNote(question.note, resultUnit)) : 'What’s its top speed?'}</p></div><span class="daily-question-icon" aria-hidden="true">${escapeHtml(question.icon)}</span></div>
+    ${questionImageMarkup(question, 'daily-question-image')}
     <div class="daily-lanes-wrap">${speedLanes(question, shownGuess, Boolean(result), resultUnit)}</div>${resultContent}`;
 }
 function renderDailyCard() {
   const content = view.querySelector('#daily-challenge-content');
   if (!content || state) return;
   content.innerHTML = dailyPanel();
+  if (dailyChallenge?.question) {
+    loadQuestionImage(dailyChallenge.question, 'daily-question-image');
+    if (revealedQuestionImages.get(dailyChallenge.question.name)) renderQuestionImage(dailyChallenge.question.name, 'daily-question-image');
+  }
   bindDailyCard();
 }
 function bindDailyCard() {
@@ -257,7 +262,7 @@ function decodeWikiText(value) {
   element.innerHTML = String(value || '').replace(/<[^>]*>/g, ' ');
   return element.value.replace(/\s+/g, ' ').trim();
 }
-async function loadQuestionImage(question) {
+async function loadQuestionImage(question, containerId = 'question-image') {
   const name = question?.name;
   if (!name || revealedQuestionImages.has(name) || questionImageRequests.has(name)) return;
   questionImageRequests.add(name);
@@ -283,20 +288,21 @@ async function loadQuestionImage(question) {
       }
     } catch {}
     revealedQuestionImages.set(name, { src: page.thumbnail.source, pageUrl: page.fullurl, pageTitle: page.title, credit, license });
-    if (state?.current?.name === name && (state.phase === 'reveal' || state.phase === 'finished')) renderQuestionImage(name);
+    if (state?.current?.name === name && ['guessing', 'reveal', 'finished'].includes(state.phase)) renderQuestionImage(name, 'question-image');
+    if (!state && dailyChallenge?.question?.name === name) renderQuestionImage(name, 'daily-question-image');
   } catch {
     revealedQuestionImages.set(name, null);
   } finally {
     questionImageRequests.delete(name);
   }
 }
-function renderQuestionImage(name) {
-  const container = view.querySelector('#question-image');
+function renderQuestionImage(name, containerId = 'question-image') {
+  const container = view.querySelector(`#${containerId}`);
   const image = revealedQuestionImages.get(name);
   if (!container || !image) return;
   const img = document.createElement('img');
   img.src = image.src;
-  img.alt = `${name}, revealed`;
+  img.alt = name;
   img.loading = 'lazy';
   img.referrerPolicy = 'no-referrer';
   img.className = 'question-image';
@@ -314,9 +320,9 @@ function renderQuestionImage(name) {
   container.replaceChildren(img, caption);
   container.classList.remove('image-unavailable');
 }
-function questionImageMarkup(question) {
+function questionImageMarkup(question, containerId = 'question-image') {
   const result = revealedQuestionImages.get(question?.name);
-  return `<div class="question-image-wrap" id="question-image" aria-live="polite">${result === null ? '<span class="image-loading">Image unavailable</span>' : '<span class="image-loading">Finding an image…</span>'}</div>`;
+  return `<div class="question-image-wrap" id="${containerId}" aria-live="polite">${result === null ? '<span class="image-loading">Image unavailable</span>' : '<span class="image-loading">Finding an image…</span>'}</div>`;
 }
 async function api(action, body = {}) {
   const response = await fetch(`/api/${action}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -499,20 +505,20 @@ function gameView() {
   const alivePlayers = state.players.filter(p => p.alive);
   const doneCount = alivePlayers.filter(p => p.submitted).length;
   const question = state.current;
-  if (state.phase === 'reveal' || state.phase === 'finished') loadQuestionImage(question);
+  loadQuestionImage(question);
   const maxGuess = displayRange(question);
   const seconds = state.deadline ? Math.max(0, Math.ceil((state.deadline - Date.now()) / 1000)) : 0;
   const guess = guessing ? (localGuess ?? Math.round(maxGuess / 2)) : me?.guess == null ? null : displaySpeed(me.guess);
   return `<div class="game-layout round-layout"><section class="game-main">
     <div class="game-head"><div><div class="eyebrow"><span class="bar"></span> ROUND ${String(state.round).padStart(2,'0')} · ${guessing ? 'MAKE YOUR GUESS' : 'ROUND RECAP'}</div><h1>${guessing ? 'How fast is it?' : 'The answer is in.'}</h1></div><button class="room-code" id="copy-code"><small>ROOM CODE</small>${state.code}</button></div>
-    <div class="question-card ${reveal ? 'reveal-card' : ''}"><div class="eyebrow"><span class="bar"></span> ${escapeHtml(question.kind)}</div><div class="question-title-row"><h2>${escapeHtml(question.name)}</h2>${reveal && question.speed != null ? `<strong class="question-speed-reveal">${displaySpeed(question.speed)} ${unitShort()}</strong>` : ''}</div><p>${reveal ? escapeHtml(displaySpeedNote(question.note)) : 'What’s its top speed?'}</p>${reveal ? questionImageMarkup(question) : ''}${guessing ? `<div class="timer">◷ &nbsp; <span id="timer-value">${seconds}</span> SEC</div>` : ''}</div>
+    <div class="question-card ${reveal ? 'reveal-card' : ''}"><div class="eyebrow"><span class="bar"></span> ${escapeHtml(question.kind)}</div><div class="question-title-row"><h2>${escapeHtml(question.name)}</h2>${reveal && question.speed != null ? `<strong class="question-speed-reveal">${displaySpeed(question.speed)} ${unitShort()}</strong>` : ''}</div><p>${reveal ? escapeHtml(displaySpeedNote(question.note)) : 'What’s its top speed?'}</p>${questionImageMarkup(question)}${guessing ? `<div class="timer">◷ &nbsp; <span id="timer-value">${seconds}</span> SEC</div>` : ''}</div>
     ${guessing ? `<div class="panel guess-card">${speedLanes(question, guess, false)}<div class="guess-control"><div class="guess-top"><label for="guess-slider">SET YOUR GUESSED SPEED</label><div class="guess-number"><span id="slider-value">${guess}</span> <small>${unitLabel()}</small></div></div><div class="range-wrap"><input class="range" id="guess-slider" type="range" min="0" max="${maxGuess}" value="${guess}" style="--progress:${guess / maxGuess * 100}%" step="1" aria-label="Set your speed guess in ${state.unitSystem === 'metric' ? 'kilometres per hour' : 'miles per hour'}" ${!me?.alive || submitted ? 'disabled' : ''}/></div><div class="range-labels"><span>0 ${unitShort()}</span><span>${maxGuess} ${unitShort()}</span></div></div><div class="guess-actions">${me?.alive ? (submitted ? `<span class="submit-message">✓ Guess locked in — waiting for the others</span>` : `<span class="submit-message" id="submit-message">${doneCount} of ${alivePlayers.length} guesses in</span><button class="btn btn-primary submit-btn" id="submit-guess">Lock it in  ↗</button>`) : `<span class="submit-message">You’re out — watch the rest of the race.</span>`}</div></div>` : `<div class="panel recap-panel">${speedLanes(question, guess, true)}<div class="panel-top"><div><div class="eyebrow">GUESS RECAP</div><h2 style="font-size:23px;margin:8px 0 0">Who was closest?</h2></div><span class="count-tag">${alivePlayers.length} STILL RACING</span></div><div class="results-list">${state.players.map(p => `<div class="result-row"><span>${escapeHtml(p.name)}${p.id === playerId ? ' (you)' : ''}${p.alive ? '' : ' · OUT'}</span><span class="result-guess">${p.guess == null ? '—' : `${displaySpeed(p.guess)} ${unitShort()}`}</span><span class="${p.damage === 0 ? 'safe' : 'damage'}">${p.damage == null ? '' : p.damage === 0 ? 'PERFECT' : `−${p.damage} HP`}</span></div>`).join('')}</div>${isHost() && reveal ? `<div class="room-actions"><button class="btn btn-primary btn-full" id="next-round">Next round  →</button></div>` : reveal ? `<div class="wait-note">Waiting for the host to start the next round…</div>` : ''}</div>`}
     </section><aside class="sidebar"><div class="side-card"><div class="panel-top"><div class="side-title" style="margin:0">HEALTH CHECK</div><span class="online-count"><i></i>${alivePlayers.length} ALIVE</span></div><div style="height:15px"></div>${healthList(state.players)}</div><div class="side-card"><div class="side-title">DAMAGE METER</div><div class="callout">The closer your slider is to the answer, the less health you lose. A perfect guess costs <strong>0 HP</strong>. ${guessing ? 'Miss the entire slider range and lose up to 100 HP.' : 'A missed guess at time runs out costs 100 HP.'}</div></div></aside></div>`;
 }
 function render() {
   if (!state) { createLanding(); return; }
   if (state.phase === 'lobby') view.innerHTML = lobby(); else view.innerHTML = gameView();
-  if ((state.phase === 'reveal' || state.phase === 'finished') && revealedQuestionImages.has(state.current?.name) && revealedQuestionImages.get(state.current?.name)) renderQuestionImage(state.current.name);
+  if (state.current && revealedQuestionImages.get(state.current.name)) renderQuestionImage(state.current.name);
   requestAnimationFrame(() => view.querySelectorAll('.heart-fill').forEach(fill => {
     fill.style.clipPath = `inset(${100 - Number(fill.dataset.fill)}% 0 0 0)`;
   }));
