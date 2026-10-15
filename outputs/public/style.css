@@ -54,10 +54,10 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: -.055em; }
 .daily-question-strip .eyebrow { font-size: 9px; }
 .daily-question-strip h3 { margin: 7px 0 3px; font-size: clamp(24px, 3vw, 34px); }
 .daily-question-strip p { margin: 6px 0 0; color: #7d8983; font-size: 15px; line-height: 1.4; }
-.daily-question-image { flex: 0 0 88px; width: 88px; min-height: 0; justify-items: center; gap: 4px; margin: 0; padding: 5px; border-radius: 10px; background: #e6edda; }
-.daily-question-image .question-image { width: 78px; height: 62px; max-height: 62px; object-fit: cover; border-radius: 6px; }
-.daily-question-image .image-loading { max-width: 78px; color: #73816a; text-align: center; font-size: 8px; }
-.daily-question-image .image-credit { max-width: 78px; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; font-size: 7px; }
+.daily-question-image { flex: 0 0 clamp(112px, 15vw, 150px); width: clamp(112px, 15vw, 150px); min-height: 0; justify-items: center; gap: 5px; margin: 0; padding: 6px; border-radius: 10px; background: #e6edda; }
+.daily-question-image .question-image { width: 100%; height: 108px; max-height: 108px; object-fit: cover; border-radius: 6px; }
+.daily-question-image .image-loading { max-width: 100%; color: #73816a; text-align: center; font-size: 8px; }
+.daily-question-image .image-credit { max-width: 100%; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; font-size: 7px; }
 .daily-lanes-wrap { margin-top: 18px; }
 .daily-lanes-wrap .answer-lane .lane-heading { display: none; }
 .daily-lanes-wrap .guess-lane .lane-heading strong { display: none; }
@@ -290,9 +290,8 @@ select.input { appearance: none; -webkit-appearance: none; padding-right: 38px; 
   .daily-head .count-tag { padding: 6px 8px; font-size: 8px; }
   .daily-question-strip { min-height: 78px; padding: 13px 14px; gap: 10px; }
   .daily-question-strip h3 { font-size: 24px; } .daily-question-strip p { margin-top: 5px; font-size: 13px; }
-  .daily-question-image { flex-basis: 72px; width: 72px; }
-  .daily-question-image .question-image { width: 62px; height: 52px; }
-  .daily-question-image .image-credit { max-width: 62px; }
+  .daily-question-image { flex-basis: 96px; width: 96px; }
+  .daily-question-image .question-image { height: 76px; }
   .daily-lanes-wrap { margin-top: 14px; }
   .daily-control-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); grid-template-areas: "guess guess" "unit submit"; align-items: end; gap: 10px; margin-top: 15px; }
   .daily-unit-row { grid-area: unit; gap: 6px; } .daily-guess-control { grid-area: guess; padding: 12px 13px 9px; }
