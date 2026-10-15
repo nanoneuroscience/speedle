@@ -20,7 +20,7 @@ let runnerLoopStarted = false;
 let animationRevealRound = null;
 const healthLevels = new Map();
 const revealedQuestionImages = new Map();
-const questionImageRequests = new Set();
+const questionImageRequests = new Map();
 let dailyDeckStatus = 'idle';
 let dailyChallenge = null;
 let dailyGuess = null;
@@ -388,7 +388,8 @@ function endlessPanel() {
     const badge = answered ? `<span class="endless-answer-badge">${isFaster ? 'FASTER' : 'SLOWER'}</span>` : '';
     const speed = answered ? `<span class="endless-speed">${displaySpeed(item.speed, endlessUnitSystem)} <small>${unitShort(endlessUnitSystem)}</small></span>` : `<span class="endless-pick-hint">Choose this one</span>`;
     const label = answered ? `${item.name}: ${displaySpeed(item.speed, endlessUnitSystem)} ${unitShort(endlessUnitSystem)}` : `Choose ${item.name} as the faster object`;
-    return `<button class="${classNames.join(' ')}" type="button" data-endless-choice="${index}" aria-label="${escapeHtml(label)}" ${answered || !endlessReady ? 'disabled' : ''}><span class="endless-choice-top">${badge}<span class="endless-choice-icon" aria-hidden="true">${escapeHtml(item.icon || '⚡')}</span></span><span class="endless-choice-kind">${escapeHtml(item.kind || 'OBJECT')}</span><strong>${escapeHtml(item.name)}</strong>${speed}</button>`;
+    const imageId = `endless-object-image-${index}`;
+    return `<button class="${classNames.join(' ')}" type="button" data-endless-choice="${index}" aria-label="${escapeHtml(label)}" ${answered || !endlessReady ? 'disabled' : ''}><div class="endless-choice-top">${badge}${questionImageMarkup(item, imageId)}</div><span class="endless-choice-kind">${escapeHtml(item.kind || 'OBJECT')}</span><strong>${escapeHtml(item.name)}</strong>${speed}</button>`;
   }).join('');
   const phaseIndex = ['left', 'vs', 'right', 'three', 'two', 'one', 'go', 'ready'].indexOf(endlessIntroPhase);
   const countdownText = { three: '3', two: '2', one: '1', go: 'GO!' }[endlessIntroPhase];
@@ -409,6 +410,12 @@ function renderEndlessCard() {
   const content = view.querySelector('#endless-challenge-content');
   if (!content || state) return;
   content.innerHTML = endlessPanel();
+  endlessPair?.forEach((item, index) => {
+    const imageId = `endless-object-image-${index}`;
+    void loadQuestionImage(item).then(() => {
+      if (endlessPair?.[index]?.name === item.name) renderQuestionImage(item.name, imageId);
+    });
+  });
   view.querySelector('#endless-retry')?.addEventListener('click', () => {
     endlessDeckStatus = 'idle'; endlessError = ''; void loadEndlessDeck();
   });
@@ -471,42 +478,57 @@ function decodeWikiText(value) {
 }
 async function loadQuestionImage(question, containerId = 'question-image') {
   const name = question?.name;
-  if (!name || revealedQuestionImages.has(name) || questionImageRequests.has(name)) return;
-  questionImageRequests.add(name);
-  try {
-    const search = new URL('https://en.wikipedia.org/w/api.php');
-    search.search = new URLSearchParams({ action: 'query', generator: 'search', gsrsearch: name, gsrnamespace: '0', gsrwhat: 'text', gsrlimit: '5', prop: 'pageimages|info', piprop: 'thumbnail|name', pithumbsize: '900', inprop: 'url', format: 'json', origin: '*' });
-    const searchResponse = await fetch(search);
-    if (!searchResponse.ok) { revealedQuestionImages.set(name, null); return; }
-    const searchData = await searchResponse.json();
-    const page = Object.values(searchData.query?.pages || {}).find(candidate => candidate.thumbnail?.source && candidate.pageimage);
-    if (!page) { revealedQuestionImages.set(name, null); return; }
-    let credit = '';
-    let license = '';
+  if (!name) return null;
+  if (revealedQuestionImages.has(name)) return revealedQuestionImages.get(name);
+  if (questionImageRequests.has(name)) return questionImageRequests.get(name);
+  const request = (async () => {
     try {
-      const fileInfo = new URL('https://commons.wikimedia.org/w/api.php');
-      fileInfo.search = new URLSearchParams({ action: 'query', titles: `File:${page.pageimage}`, prop: 'imageinfo', iiprop: 'extmetadata', format: 'json', origin: '*' });
-      const fileResponse = await fetch(fileInfo);
-      if (fileResponse.ok) {
-        const fileData = await fileResponse.json();
-        const metadata = Object.values(fileData.query?.pages || {})[0]?.imageinfo?.[0]?.extmetadata || {};
-        credit = decodeWikiText(metadata.Artist?.value || metadata.Credit?.value || '');
-        license = decodeWikiText(metadata.LicenseShortName?.value || '');
-      }
-    } catch {}
-    revealedQuestionImages.set(name, { src: page.thumbnail.source, pageUrl: page.fullurl, pageTitle: page.title, credit, license });
-    if (state?.current?.name === name && ['guessing', 'reveal', 'finished'].includes(state.phase)) renderQuestionImage(name, 'question-image');
-    if (!state && dailyChallenge?.question?.name === name) renderQuestionImage(name, 'daily-question-image');
-  } catch {
-    revealedQuestionImages.set(name, null);
-  } finally {
-    questionImageRequests.delete(name);
-  }
+      const search = new URL('https://en.wikipedia.org/w/api.php');
+      search.search = new URLSearchParams({ action: 'query', generator: 'search', gsrsearch: name, gsrnamespace: '0', gsrwhat: 'text', gsrlimit: '5', prop: 'pageimages|info', piprop: 'thumbnail|name', pithumbsize: '900', inprop: 'url', format: 'json', origin: '*' });
+      const searchResponse = await fetch(search);
+      if (!searchResponse.ok) { revealedQuestionImages.set(name, null); return null; }
+      const searchData = await searchResponse.json();
+      const page = Object.values(searchData.query?.pages || {}).find(candidate => candidate.thumbnail?.source && candidate.pageimage);
+      if (!page) { revealedQuestionImages.set(name, null); return null; }
+      let credit = '';
+      let license = '';
+      try {
+        const fileInfo = new URL('https://commons.wikimedia.org/w/api.php');
+        fileInfo.search = new URLSearchParams({ action: 'query', titles: `File:${page.pageimage}`, prop: 'imageinfo', iiprop: 'extmetadata', format: 'json', origin: '*' });
+        const fileResponse = await fetch(fileInfo);
+        if (fileResponse.ok) {
+          const fileData = await fileResponse.json();
+          const metadata = Object.values(fileData.query?.pages || {})[0]?.imageinfo?.[0]?.extmetadata || {};
+          credit = decodeWikiText(metadata.Artist?.value || metadata.Credit?.value || '');
+          license = decodeWikiText(metadata.LicenseShortName?.value || '');
+        }
+      } catch {}
+      const image = { src: page.thumbnail.source, pageUrl: page.fullurl, pageTitle: page.title, credit, license };
+      revealedQuestionImages.set(name, image);
+      if (state?.current?.name === name && ['guessing', 'reveal', 'finished'].includes(state.phase)) renderQuestionImage(name, 'question-image');
+      if (!state && dailyChallenge?.question?.name === name) renderQuestionImage(name, 'daily-question-image');
+      return image;
+    } catch {
+      revealedQuestionImages.set(name, null);
+      return null;
+    } finally {
+      questionImageRequests.delete(name);
+    }
+  })();
+  questionImageRequests.set(name, request);
+  return request;
 }
 function renderQuestionImage(name, containerId = 'question-image') {
   const container = view.querySelector(`#${containerId}`);
+  if (!container || !revealedQuestionImages.has(name)) return;
   const image = revealedQuestionImages.get(name);
-  if (!container || !image) return;
+  if (!image) {
+    container.replaceChildren(Object.assign(document.createElement('span'), { className: 'image-loading', textContent: 'Image unavailable' }));
+    container.classList.add('image-unavailable');
+    if (containerId === 'daily-question-image') view.querySelector('#daily-question-credit')?.replaceChildren();
+    return;
+  }
+  if (container.querySelector('.question-image')?.src === image.src) return;
   const img = document.createElement('img');
   img.src = image.src;
   img.alt = name;
@@ -515,7 +537,7 @@ function renderQuestionImage(name, containerId = 'question-image') {
   img.className = 'question-image';
   const isDailyImage = containerId === 'daily-question-image';
   img.addEventListener('error', () => {
-    container.replaceChildren();
+    container.replaceChildren(Object.assign(document.createElement('span'), { className: 'image-loading', textContent: 'Image unavailable' }));
     container.classList.add('image-unavailable');
     if (isDailyImage) view.querySelector('#daily-question-credit')?.replaceChildren();
   }, { once: true });
@@ -540,7 +562,8 @@ function renderQuestionImage(name, containerId = 'question-image') {
 function questionImageMarkup(question, containerId = 'question-image') {
   const result = revealedQuestionImages.get(question?.name);
   const dailyImage = containerId === 'daily-question-image';
-  const className = dailyImage ? 'question-image-wrap daily-question-image' : 'question-image-wrap';
+  const endlessImage = containerId.startsWith('endless-object-image-');
+  const className = dailyImage ? 'question-image-wrap daily-question-image' : `question-image-wrap${endlessImage ? ' endless-question-image' : ''}`;
   return `<div class="${className}" id="${containerId}" aria-live="polite">${result === null ? '<span class="image-loading">Image unavailable</span>' : '<span class="image-loading">Finding an image…</span>'}</div>`;
 }
 async function api(action, body = {}) {
