@@ -94,13 +94,15 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: -.055em; }
 .community-stats > div { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 7px; background: #f3f3ed; }
 .community-stats strong { font: 600 18px/1 var(--mono); }
 .community-stats span { color: var(--muted); font: 500 7px var(--mono); letter-spacing: .08em; }
-.community-chart { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); align-items: end; gap: 3px; height: 111px; margin-top: 15px; padding: 0 2px; }
-.community-bin { display: grid; grid-template-rows: 17px 1fr; align-items: end; height: 100%; min-width: 0; text-align: center; }
-.community-bin-share { color: #829087; font: 7px var(--mono); white-space: nowrap; }
-.community-bar-track { position: relative; width: min(100%, 24px); height: 86px; justify-self: center; overflow: hidden; border-radius: 3px 3px 1px 1px; background: #f0f1eb; }
-.community-bar-track i { position: absolute; right: 0; bottom: 0; left: 0; display: block; border-radius: 4px 4px 0 0; background: #afc28d; }
+.community-plot { display: grid; grid-template-columns: 25px minmax(0, 1fr); align-items: stretch; gap: 7px; margin-top: 15px; }
+.community-y-axis { display: flex; flex-direction: column; justify-content: space-between; padding-bottom: 1px; color: #87918d; font: 7px var(--mono); text-align: right; }
+.community-chart { position: relative; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); align-items: stretch; gap: 2px; height: 124px; overflow: hidden; border-bottom: 1px solid #bfc7bd; }
+.community-chart::before { position: absolute; z-index: 0; inset: 0; background-image: linear-gradient(to right, #e8ebe4 1px, transparent 1px), linear-gradient(to top, #e8ebe4 1px, transparent 1px); background-size: 25% 100%, 100% 50%; content: ""; pointer-events: none; }
+.community-bin { position: relative; z-index: 1; display: flex; align-items: flex-end; justify-content: center; height: 100%; min-width: 0; }
+.community-bar-track { position: relative; width: min(100%, 34px); height: 100%; overflow: hidden; }
+.community-bar-track i { position: absolute; right: 0; bottom: 0; left: 0; display: block; border-radius: 2px 2px 0 0; background: #afc28d; }
 .community-bin.is-your-score .community-bar-track i { background: var(--orange); }
-.community-x-axis { position: relative; height: 9px; margin: 5px 2px 0; color: #7e8a83; font: 7px var(--mono); }
+.community-x-axis { position: relative; height: 9px; margin: 6px 0 0 32px; color: #7e8a83; font: 7px var(--mono); }
 .community-x-axis span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
 .community-x-axis span::before { position: absolute; top: -4px; left: 50%; width: 1px; height: 3px; background: #d6dad2; content: ""; }
 .community-x-axis span:first-child { transform: none; }
@@ -311,8 +313,10 @@ select.input { appearance: none; -webkit-appearance: none; padding-right: 38px; 
   .daily-community-head h3 { font-size: 18px; } .community-refresh { width: 30px; height: 30px; }
   .community-stats { gap: 5px; margin-top: 11px; } .community-stats > div { padding: 9px 7px; }
   .community-stats strong { font-size: 15px; } .community-stats span { font-size: 6px; }
-  .community-chart { gap: 2px; height: 99px; margin-top: 12px; }
-  .community-bin { grid-template-rows: 15px 1fr; } .community-bar-track { height: 76px; }
+  .community-plot { grid-template-columns: 22px minmax(0, 1fr); gap: 5px; margin-top: 12px; }
+  .community-y-axis { font-size: 6px; }
+  .community-chart { gap: 2px; height: 100px; }
+  .community-bar-track { width: min(100%, 27px); }
   .community-x-axis { font-size: 6px; }
   .community-axis-note { font-size: 6px; } .community-privacy { font-size: 8px; }
   .rule { display: grid; grid-template-columns: 22px 1fr; align-items: start; padding: 12px 14px; }

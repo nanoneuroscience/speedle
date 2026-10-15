@@ -165,12 +165,12 @@ function dailyCommunityPanel() {
   const userBucket = Math.min(9, Math.floor(stats.myAccuracy / 10));
   const bars = stats.buckets.map((count, index) => {
     const share = shares[index];
-    const height = count ? Math.max(5, Math.round(share / maxShare * 100)) : 0;
+    const height = count ? Math.max(1, Math.round(share / maxShare * 100)) : 0;
     const shareLabel = share ? `${share * 100 < 10 ? (share * 100).toFixed(1) : Math.round(share * 100)}%` : '';
     const label = index === 9 ? '90–100' : `${index * 10}–${index * 10 + 9}`;
-    return `<div class="community-bin ${index === userBucket ? 'is-your-score' : ''}" title="${label}% accuracy: ${shareLabel} of scores"><span class="community-bin-share">${shareLabel}</span><div class="community-bar-track"><i style="height:${height}%"></i></div></div>`;
+    return `<div class="community-bin ${index === userBucket ? 'is-your-score' : ''}" title="${label}% accuracy: ${shareLabel} of scores"><div class="community-bar-track"><i style="height:${height}%"></i></div></div>`;
   }).join('');
-  return `<section class="daily-community" aria-live="polite">${header}<div class="community-stats"><div><strong>${stats.averageAccuracy}%</strong><span>AVERAGE ACCURACY</span></div><div><strong>${stats.percentile}%</strong><span>BEAT</span></div></div><div class="community-chart" role="img" aria-label="Normalized accuracy distribution in 10 percent ranges. Your score is ${stats.myAccuracy} percent.">${bars}</div><div class="community-x-axis" aria-hidden="true"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div><div class="community-axis-note"><span>ACCURACY SCORE · SHARE OF SCORES</span><span class="community-your-key"><i></i> YOUR SCORE RANGE</span></div></section>`;
+  return `<section class="daily-community" aria-live="polite">${header}<div class="community-stats"><div><strong>${stats.averageAccuracy}%</strong><span>AVERAGE ACCURACY</span></div><div><strong>${stats.percentile}%</strong><span>BEAT</span></div></div><div class="community-plot"><div class="community-y-axis" aria-hidden="true"><span>100%</span><span>50%</span><span>0%</span></div><div class="community-chart" role="img" aria-label="Normalized accuracy histogram in 10 percent ranges. The vertical scale is relative to the largest score range. Your score is ${stats.myAccuracy} percent.">${bars}</div></div><div class="community-x-axis" aria-hidden="true"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div><div class="community-axis-note"><span>ACCURACY · NORMALIZED FREQUENCY</span><span class="community-your-key"><i></i> YOUR SCORE RANGE</span></div></section>`;
 }
 function dailyPanel() {
   if (dailyDeckStatus === 'loading' || dailyDeckStatus === 'idle') return `<div class="daily-loading"><span class="spinner"></span> Loading today’s shared challenge…</div>`;
