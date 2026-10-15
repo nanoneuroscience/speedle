@@ -19,6 +19,8 @@ let runnerLastFrame = 0;
 let runnerLoopStarted = false;
 let animationRevealRound = null;
 const healthLevels = new Map();
+const revealedQuestionImages = new Map();
+const questionImageRequests = new Set();
 let dailyDeckStatus = 'idle';
 let dailyChallenge = null;
 let dailyGuess = null;
@@ -250,6 +252,72 @@ function startRunnerLoop() {
   requestAnimationFrame(animateRunner);
 }
 function notify(message) { toast.textContent = message; toast.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 2600); }
+function decodeWikiText(value) {
+  const element = document.createElement('textarea');
+  element.innerHTML = String(value || '').replace(/<[^>]*>/g, ' ');
+  return element.value.replace(/\s+/g, ' ').trim();
+}
+async function loadQuestionImage(question) {
+  const name = question?.name;
+  if (!name || revealedQuestionImages.has(name) || questionImageRequests.has(name)) return;
+  questionImageRequests.add(name);
+  try {
+    const search = new URL('https://en.wikipedia.org/w/api.php');
+    search.search = new URLSearchParams({ action: 'query', generator: 'search', gsrsearch: name, gsrnamespace: '0', gsrwhat: 'text', gsrlimit: '5', prop: 'pageimages|info', piprop: 'thumbnail|name', pithumbsize: '900', inprop: 'url', format: 'json', origin: '*' });
+    const searchResponse = await fetch(search);
+    if (!searchResponse.ok) { revealedQuestionImages.set(name, null); return; }
+    const searchData = await searchResponse.json();
+    const page = Object.values(searchData.query?.pages || {}).find(candidate => candidate.thumbnail?.source && candidate.pageimage);
+    if (!page) { revealedQuestionImages.set(name, null); return; }
+    let credit = '';
+    let license = '';
+    try {
+      const fileInfo = new URL('https://commons.wikimedia.org/w/api.php');
+      fileInfo.search = new URLSearchParams({ action: 'query', titles: `File:${page.pageimage}`, prop: 'imageinfo', iiprop: 'extmetadata', format: 'json', origin: '*' });
+      const fileResponse = await fetch(fileInfo);
+      if (fileResponse.ok) {
+        const fileData = await fileResponse.json();
+        const metadata = Object.values(fileData.query?.pages || {})[0]?.imageinfo?.[0]?.extmetadata || {};
+        credit = decodeWikiText(metadata.Artist?.value || metadata.Credit?.value || '');
+        license = decodeWikiText(metadata.LicenseShortName?.value || '');
+      }
+    } catch {}
+    revealedQuestionImages.set(name, { src: page.thumbnail.source, pageUrl: page.fullurl, pageTitle: page.title, credit, license });
+    if (state?.current?.name === name && (state.phase === 'reveal' || state.phase === 'finished')) renderQuestionImage(name);
+  } catch {
+    revealedQuestionImages.set(name, null);
+  } finally {
+    questionImageRequests.delete(name);
+  }
+}
+function renderQuestionImage(name) {
+  const container = view.querySelector('#question-image');
+  const image = revealedQuestionImages.get(name);
+  if (!container || !image) return;
+  const img = document.createElement('img');
+  img.src = image.src;
+  img.alt = `${name}, revealed`;
+  img.loading = 'lazy';
+  img.referrerPolicy = 'no-referrer';
+  img.className = 'question-image';
+  img.addEventListener('error', () => { container.replaceChildren(); container.classList.add('image-unavailable'); }, { once: true });
+  const caption = document.createElement('div');
+  caption.className = 'image-credit';
+  if (image.pageUrl) {
+    const source = document.createElement('a');
+    source.href = image.pageUrl;
+    source.target = '_blank';
+    source.rel = 'noreferrer';
+    source.textContent = `Image source: ${image.pageTitle}${image.credit ? ` · ${image.credit}` : ''}${image.license ? ` · ${image.license}` : ''}`;
+    caption.append(source);
+  }
+  container.replaceChildren(img, caption);
+  container.classList.remove('image-unavailable');
+}
+function questionImageMarkup(question) {
+  const result = revealedQuestionImages.get(question?.name);
+  return `<div class="question-image-wrap" id="question-image" aria-live="polite">${result === null ? '<span class="image-loading">Image unavailable</span>' : '<span class="image-loading">Finding an image…</span>'}</div>`;
+}
 async function api(action, body = {}) {
   const response = await fetch(`/api/${action}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const data = await response.json();
@@ -423,25 +491,28 @@ function speedLanes(question, guess, revealed, unitSystem = state?.unitSystem) {
 function gameView() {
   const me = currentPlayer();
   if (state.phase === 'finished') {
-    return `<div class="game-layout round-layout"><section class="game-main"><div class="game-head"><div><div class="eyebrow"><span class="bar"></span> GAME OVER · ROOM ${state.code}</div><h1>The race is over.</h1></div><div class="room-code"><small>FINAL ROUND</small>${state.round}</div></div><div class="panel winner-panel"><div class="trophy">🏆</div><div class="eyebrow" style="justify-content:center;margin-top:16px">LAST ONE STANDING</div><h2>${escapeHtml(state.winner?.name || 'No winner')}</h2><p>Outlasted the whole crew and crossed the finish line.</p><div class="player-health-big">${state.winner ? state.players.find(p => p.id === state.winner.id)?.health : 0} <span style="font:12px var(--mono);color:#7e8b82">HP LEFT</span></div><div class="winner-actions">${isHost() ? '<button class="btn btn-primary" id="play-again">Play again</button>' : '<p class="wait-note">You’ll stay in this room while the host decides whether to play again.</p>'}<button class="btn" id="leave-game">Back to home</button></div></div></section><aside class="sidebar"><div class="side-card"><div class="side-title">FINAL HEALTH</div>${healthList(state.players)}</div></aside></div>`;
+    loadQuestionImage(state.current);
+    return `<div class="game-layout round-layout"><section class="game-main"><div class="game-head"><div><div class="eyebrow"><span class="bar"></span> GAME OVER · ROOM ${state.code}</div><h1>The race is over.</h1></div><div class="room-code"><small>FINAL ROUND</small>${state.round}</div></div><div class="question-card reveal-card final-question-card"><div class="eyebrow"><span class="bar"></span> ${escapeHtml(state.current?.kind)}</div><div class="question-title-row"><h2>${escapeHtml(state.current?.name)}</h2>${state.current?.speed != null ? `<strong class="question-speed-reveal">${displaySpeed(state.current.speed)} ${unitShort()}</strong>` : ''}</div>${questionImageMarkup(state.current)}</div><div class="panel winner-panel"><div class="trophy">🏆</div><div class="eyebrow" style="justify-content:center;margin-top:16px">LAST ONE STANDING</div><h2>${escapeHtml(state.winner?.name || 'No winner')}</h2><p>Outlasted the whole crew and crossed the finish line.</p><div class="player-health-big">${state.winner ? state.players.find(p => p.id === state.winner.id)?.health : 0} <span style="font:12px var(--mono);color:#7e8b82">HP LEFT</span></div><div class="winner-actions">${isHost() ? '<button class="btn btn-primary" id="play-again">Play again</button>' : '<p class="wait-note">You’ll stay in this room while the host decides whether to play again.</p>'}<button class="btn" id="leave-game">Back to home</button></div></div></section><aside class="sidebar"><div class="side-card"><div class="side-title">FINAL HEALTH</div>${healthList(state.players)}</div></aside></div>`;
   }
   const guessing = state.phase === 'guessing'; const reveal = state.phase === 'reveal';
   const submitted = me?.submitted;
   const alivePlayers = state.players.filter(p => p.alive);
   const doneCount = alivePlayers.filter(p => p.submitted).length;
   const question = state.current;
+  if (state.phase === 'reveal' || state.phase === 'finished') loadQuestionImage(question);
   const maxGuess = displayRange(question);
   const seconds = state.deadline ? Math.max(0, Math.ceil((state.deadline - Date.now()) / 1000)) : 0;
   const guess = guessing ? (localGuess ?? Math.round(maxGuess / 2)) : me?.guess == null ? null : displaySpeed(me.guess);
   return `<div class="game-layout round-layout"><section class="game-main">
     <div class="game-head"><div><div class="eyebrow"><span class="bar"></span> ROUND ${String(state.round).padStart(2,'0')} · ${guessing ? 'MAKE YOUR GUESS' : 'ROUND RECAP'}</div><h1>${guessing ? 'How fast is it?' : 'The answer is in.'}</h1></div><button class="room-code" id="copy-code"><small>ROOM CODE</small>${state.code}</button></div>
-    <div class="question-card ${reveal ? 'reveal-card' : ''}"><div class="eyebrow"><span class="bar"></span> ${escapeHtml(question.kind)}</div><div class="question-title-row"><h2>${escapeHtml(question.name)}</h2>${reveal && question.speed != null ? `<strong class="question-speed-reveal">${displaySpeed(question.speed)} ${unitShort()}</strong>` : ''}</div><p>${reveal ? escapeHtml(displaySpeedNote(question.note)) : 'What’s its top speed?'}</p>${guessing ? `<div class="timer">◷ &nbsp; <span id="timer-value">${seconds}</span> SEC</div>` : ''}</div>
+    <div class="question-card ${reveal ? 'reveal-card' : ''}"><div class="eyebrow"><span class="bar"></span> ${escapeHtml(question.kind)}</div><div class="question-title-row"><h2>${escapeHtml(question.name)}</h2>${reveal && question.speed != null ? `<strong class="question-speed-reveal">${displaySpeed(question.speed)} ${unitShort()}</strong>` : ''}</div><p>${reveal ? escapeHtml(displaySpeedNote(question.note)) : 'What’s its top speed?'}</p>${reveal ? questionImageMarkup(question) : ''}${guessing ? `<div class="timer">◷ &nbsp; <span id="timer-value">${seconds}</span> SEC</div>` : ''}</div>
     ${guessing ? `<div class="panel guess-card">${speedLanes(question, guess, false)}<div class="guess-control"><div class="guess-top"><label for="guess-slider">SET YOUR GUESSED SPEED</label><div class="guess-number"><span id="slider-value">${guess}</span> <small>${unitLabel()}</small></div></div><div class="range-wrap"><input class="range" id="guess-slider" type="range" min="0" max="${maxGuess}" value="${guess}" style="--progress:${guess / maxGuess * 100}%" step="1" aria-label="Set your speed guess in ${state.unitSystem === 'metric' ? 'kilometres per hour' : 'miles per hour'}" ${!me?.alive || submitted ? 'disabled' : ''}/></div><div class="range-labels"><span>0 ${unitShort()}</span><span>${maxGuess} ${unitShort()}</span></div></div><div class="guess-actions">${me?.alive ? (submitted ? `<span class="submit-message">✓ Guess locked in — waiting for the others</span>` : `<span class="submit-message" id="submit-message">${doneCount} of ${alivePlayers.length} guesses in</span><button class="btn btn-primary submit-btn" id="submit-guess">Lock it in  ↗</button>`) : `<span class="submit-message">You’re out — watch the rest of the race.</span>`}</div></div>` : `<div class="panel recap-panel">${speedLanes(question, guess, true)}<div class="panel-top"><div><div class="eyebrow">GUESS RECAP</div><h2 style="font-size:23px;margin:8px 0 0">Who was closest?</h2></div><span class="count-tag">${alivePlayers.length} STILL RACING</span></div><div class="results-list">${state.players.map(p => `<div class="result-row"><span>${escapeHtml(p.name)}${p.id === playerId ? ' (you)' : ''}${p.alive ? '' : ' · OUT'}</span><span class="result-guess">${p.guess == null ? '—' : `${displaySpeed(p.guess)} ${unitShort()}`}</span><span class="${p.damage === 0 ? 'safe' : 'damage'}">${p.damage == null ? '' : p.damage === 0 ? 'PERFECT' : `−${p.damage} HP`}</span></div>`).join('')}</div>${isHost() && reveal ? `<div class="room-actions"><button class="btn btn-primary btn-full" id="next-round">Next round  →</button></div>` : reveal ? `<div class="wait-note">Waiting for the host to start the next round…</div>` : ''}</div>`}
     </section><aside class="sidebar"><div class="side-card"><div class="panel-top"><div class="side-title" style="margin:0">HEALTH CHECK</div><span class="online-count"><i></i>${alivePlayers.length} ALIVE</span></div><div style="height:15px"></div>${healthList(state.players)}</div><div class="side-card"><div class="side-title">DAMAGE METER</div><div class="callout">The closer your slider is to the answer, the less health you lose. A perfect guess costs <strong>0 HP</strong>. ${guessing ? 'Miss the entire slider range and lose up to 100 HP.' : 'A missed guess at time runs out costs 100 HP.'}</div></div></aside></div>`;
 }
 function render() {
   if (!state) { createLanding(); return; }
   if (state.phase === 'lobby') view.innerHTML = lobby(); else view.innerHTML = gameView();
+  if ((state.phase === 'reveal' || state.phase === 'finished') && revealedQuestionImages.has(state.current?.name) && revealedQuestionImages.get(state.current?.name)) renderQuestionImage(state.current.name);
   requestAnimationFrame(() => view.querySelectorAll('.heart-fill').forEach(fill => {
     fill.style.clipPath = `inset(${100 - Number(fill.dataset.fill)}% 0 0 0)`;
   }));
