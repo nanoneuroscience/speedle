@@ -47,8 +47,8 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: -.055em; }
 .hint { margin: 15px 0 0; font-size: 11px; line-height: 1.5; color: #8a9590; }
 .daily-section { margin: 28px 0 52px; }
 .daily-game-panel { padding: 28px 32px; box-shadow: 0 12px 34px #1a342109; }
-.daily-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
-.daily-head h2 { font-size: clamp(27px, 3.5vw, 38px); margin: 8px 0 0; }
+.daily-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
+.daily-head h2 { font-size: clamp(27px, 3.5vw, 38px); margin: 0; }
 .daily-head .count-tag { padding: 8px 12px; font-size: 10px; white-space: nowrap; }
 .daily-question-strip { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 92px; padding: 14px 18px 14px 22px; border-radius: 11px; background: #f3f3ed; }
 .daily-question-strip .eyebrow { font-size: 9px; }
