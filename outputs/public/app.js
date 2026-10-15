@@ -159,18 +159,24 @@ function dailyCommunityPanel() {
   if (dailyCommunityStatus === 'error') return `<section class="daily-community" aria-live="polite">${header}<div class="community-message"><span>${escapeHtml(dailyCommunityError || 'Could not load community scores.')}</span><button class="btn community-retry" id="daily-community-retry" type="button">Try again</button></div></section>`;
   const stats = dailyCommunityStats;
   const totalScores = stats?.buckets?.reduce((sum, count) => sum + count, 0) || 0;
-  if (!stats || totalScores === 0) return `<section class="daily-community" aria-live="polite">${header}<div class="community-message">The community distribution will appear here as results come in.</div></section>`;
-  const shares = stats.buckets.map(count => count / totalScores);
-  const maxShare = Math.max(...shares);
+  if (!stats) return `<section class="daily-community" aria-live="polite">${header}<div class="community-message">The community distribution will appear here as results come in.</div></section>`;
+  const shares = stats.buckets.map(count => totalScores ? count / totalScores : 0);
+  const prior = stats.buckets.map((_, index) => Math.exp(-0.5 * Math.pow((index - 4.5) / 1.8, 2)));
+  const priorTotal = prior.reduce((sum, weight) => sum + weight, 0);
+  const combined = stats.buckets.map((count, index) => count + (prior[index] / priorTotal) * 40);
+  const maxCombined = Math.max(...combined);
   const userBucket = Math.min(9, Math.floor(stats.myAccuracy / 10));
   const bars = stats.buckets.map((count, index) => {
     const share = shares[index];
-    const height = count ? Math.max(1, Math.round(share / maxShare * 100)) : 0;
+    const height = Math.round(combined[index] / maxCombined * 100);
     const shareLabel = share ? `${share * 100 < 10 ? (share * 100).toFixed(1) : Math.round(share * 100)}%` : '';
     const label = index === 9 ? '90–100' : `${index * 10}–${index * 10 + 9}`;
-    return `<div class="community-bin ${index === userBucket ? 'is-your-score' : ''}" title="${label}% accuracy: ${shareLabel} of scores"><div class="community-bar-track"><i style="height:${height}%"></i></div></div>`;
+    const detail = shareLabel ? `${shareLabel} of real scores` : 'bell-curve baseline only';
+    return `<div class="community-bin ${index === userBucket ? 'is-your-score' : ''}" title="${label}% accuracy · ${detail}"><div class="community-bar-track"><i style="height:${height}%"></i></div></div>`;
   }).join('');
-  return `<section class="daily-community" aria-live="polite">${header}<div class="community-stats"><div><strong>${stats.averageAccuracy}%</strong><span>AVERAGE ACCURACY</span></div><div><strong>${stats.percentile}%</strong><span>BEAT</span></div></div><div class="community-plot"><div class="community-y-axis" aria-hidden="true"><span>100%</span><span>50%</span><span>0%</span></div><div class="community-chart" role="img" aria-label="Normalized accuracy histogram in 10 percent ranges. The vertical scale is relative to the largest score range. Your score is ${stats.myAccuracy} percent.">${bars}</div></div><div class="community-x-axis" aria-hidden="true"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div><div class="community-axis-note"><span>ACCURACY · NORMALIZED FREQUENCY</span><span class="community-your-key"><i></i> YOUR SCORE RANGE</span></div></section>`;
+  const average = stats.averageAccuracy == null ? '—' : `${stats.averageAccuracy}%`;
+  const percentile = stats.percentile == null ? '—' : `${stats.percentile}%`;
+  return `<section class="daily-community" aria-live="polite">${header}<div class="community-stats"><div><strong>${average}</strong><span>AVERAGE ACCURACY</span></div><div><strong>${percentile}</strong><span>BEAT</span></div></div><div class="community-plot"><div class="community-y-axis" aria-hidden="true"><span>100%</span><span>50%</span><span>0%</span></div><div class="community-chart" role="img" aria-label="Bell-curve baseline combined with community scores in 10 percent ranges. The vertical scale is relative to the largest score range. Your score is ${stats.myAccuracy} percent.">${bars}</div></div><div class="community-x-axis" aria-hidden="true"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div><div class="community-axis-note"><span>BELL CURVE + REAL SCORES</span><span class="community-your-key"><i></i> YOUR SCORE RANGE</span></div></section>`;
 }
 function dailyPanel() {
   if (dailyDeckStatus === 'loading' || dailyDeckStatus === 'idle') return `<div class="daily-loading"><span class="spinner"></span> Loading today’s shared challenge…</div>`;
