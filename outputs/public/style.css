@@ -54,18 +54,21 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: -.055em; }
 .endless-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .endless-head h2 { margin: 0; font-size: clamp(27px, 3.5vw, 38px); }
 .endless-head p { margin: 7px 0 0; color: #7d8983; font-size: 14px; }
-.endless-unit-control { display: flex; flex-direction: column; min-width: 120px; }
-.endless-unit-control .field-label { margin-bottom: 5px; }
-.endless-unit-control .input { height: 40px; font-size: 12px; }
-.endless-scoreboard { display: grid; grid-template-columns: 110px 110px minmax(0, 1fr); align-items: center; gap: 10px; margin: 20px 0 14px; padding: 12px 16px; border-radius: 9px; background: #f3f3ed; }
+.endless-unit-control { display: flex; flex-direction: column; min-width: 148px; }
+.endless-unit-switch { position: relative; display: grid; width: 148px; height: 40px; grid-template-columns: 1fr 1fr; padding: 3px; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: #f7f7f2; }
+.endless-unit-indicator { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); border-radius: 5px; background: var(--green); transition: transform .2s ease; }
+.endless-unit-switch[data-active="metric"] .endless-unit-indicator { transform: translateX(100%); }
+.endless-unit-option { position: relative; z-index: 1; min-width: 0; padding: 0 4px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font: 600 10px var(--mono); cursor: pointer; transition: color .18s ease; }
+.endless-unit-option.is-active { color: var(--ink); }
+.endless-unit-option:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
+.endless-unit-option:disabled { cursor: default; opacity: .62; }
+.endless-scoreboard { display: grid; grid-template-columns: 110px 110px; align-items: center; gap: 10px; margin: 20px 0 14px; padding: 12px 16px; border-radius: 9px; background: #f3f3ed; }
 .endless-scoreboard > div { display: flex; align-items: baseline; gap: 8px; }
 .endless-scoreboard strong { font: 700 25px/1 var(--display); letter-spacing: -.05em; }
 .endless-scoreboard span { color: var(--muted); font: 500 9px var(--mono); letter-spacing: .08em; }
-.endless-scoreboard .endless-round-prompt { justify-self: end; color: #728169; }
-.endless-ready-flag { display: inline-block; margin-right: 5px; font-size: 13px; vertical-align: -2px; }
 .endless-stage { position: relative; }
 .endless-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 96px; }
-.endless-choice { display: flex; min-width: 0; min-height: 230px; flex-direction: column; align-items: flex-start; padding: 17px 20px 18px; border: 1px solid #e1e5dc; border-radius: 10px; background: var(--white); color: var(--ink); text-align: left; cursor: pointer; transition: transform .16s, border-color .16s, background .16s, box-shadow .16s; }
+.endless-choice { position: relative; isolation: isolate; display: flex; min-width: 0; min-height: 230px; flex-direction: column; align-items: flex-start; justify-content: flex-end; overflow: hidden; padding: 17px 20px 18px; border: 1px solid #e1e5dc; border-radius: 10px; background: #263a34; color: white; text-align: left; cursor: pointer; transition: transform .16s, border-color .16s, background .16s, box-shadow .16s; }
 .endless-choice.endless-hidden { visibility: hidden; opacity: 0; transform: translateX(18px) scale(.96); pointer-events: none; }
 .endless-choice.endless-visible { visibility: visible; opacity: 1; transform: none; }
 .endless-choice.endless-enter-left { visibility: visible; animation: endlessObjectLeft .48s cubic-bezier(.2,.78,.25,1) both; }
@@ -74,27 +77,31 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: -.055em; }
 .endless-choice:focus-visible { outline: 3px solid #ee765155; outline-offset: 2px; }
 .endless-choice:disabled { cursor: default; }
 .endless-choice.is-faster { border-color: #abc881; background: #f8fbf1; }
+.endless-choice.is-slower { border-color: #e6a28f; }
 .endless-choice.is-picked-wrong { border-color: #e6a28f; background: #fff9f6; }
-.endless-choice-top { position: relative; display: block; width: 100%; height: 130px; min-height: 0; margin-bottom: 3px; }
-.question-image-wrap.endless-question-image { position: absolute; z-index: 0; inset: 0; display: flex; min-height: 0; flex-direction: column; align-items: stretch; justify-content: stretch; gap: 0; overflow: hidden; margin: 0; border-radius: 7px; background: #f3f3ed; }
-.endless-question-image .question-image { width: 100%; height: 0; min-height: 0; max-width: none; max-height: none; flex: 1 1 auto; object-fit: contain; object-position: center; border-radius: 7px 7px 0 0; background: #f3f3ed; }
-.endless-question-image .image-loading { display: grid; min-height: 0; flex: 1 1 auto; place-items: center; padding: 10px; color: #7c887f; text-align: center; font: 8px/1.4 var(--mono); }
-.endless-question-image .image-credit { width: 100%; max-width: 100%; flex: 0 0 auto; overflow: hidden; padding: 4px 6px; background: #f3f3ed; color: #7d887e; text-overflow: ellipsis; white-space: nowrap; font: 6px/1.2 var(--mono); }
-.endless-question-image .image-credit a { color: inherit; }
-.endless-choice-top .endless-answer-badge { position: absolute; z-index: 1; top: 7px; left: 7px; padding: 5px 7px; border: 1px solid #ffffffb3; background: #ffffffeb; }
-.endless-answer-badge { padding: 6px 8px; border-radius: 4px; background: #edf3e3; color: #66823d; font: 600 8px var(--mono); letter-spacing: .08em; }
-.endless-choice-kind { margin-top: 11px; color: var(--muted); font: 500 8px var(--mono); letter-spacing: .1em; }
-.endless-choice strong { margin-top: 5px; font: 600 clamp(20px, 2.4vw, 29px)/1.1 var(--display); letter-spacing: -.045em; }
-.endless-speed { margin-top: 10px; font: 600 17px var(--mono); }
-.endless-speed small { color: var(--muted); font-size: 10px; font-weight: 500; }
-.endless-pick-hint { margin-top: 10px; color: #8b9690; font-size: 11px; }
+.question-image-wrap.endless-card-image { position: absolute; z-index: 0; inset: 0; display: block; overflow: hidden; margin: 0; border-radius: inherit; background: #263a34; }
+.endless-card-image::before { position: absolute; z-index: 1; inset: 0; background: transparent; content: ""; pointer-events: none; transition: background .24s ease; }
+.endless-card-image::after { position: absolute; z-index: 1; inset: 0; background: linear-gradient(180deg, #15251f0d 0%, #15251f12 34%, #15251f8c 70%, #15251ff5 100%), linear-gradient(90deg, #15251f45, transparent 72%); content: ""; pointer-events: none; }
+.endless-choice.is-faster .endless-card-image::before { background: #82bc555c; }
+.endless-choice.is-slower .endless-card-image::before { background: #e7614d66; }
+.endless-choice.is-revealing .endless-card-image::before { animation: endlessWashIn .5s ease-out both; }
+.endless-choice.is-revealing:nth-child(2) .endless-card-image::before { animation-delay: .1s; }
+.endless-choice.is-picked-now { animation: endlessPickTap .4s cubic-bezier(.2,.8,.25,1.2) both; }
+.endless-card-image .question-image { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: cover; object-position: center; border-radius: inherit; background: #263a34; }
+.endless-card-image .image-loading { position: absolute; z-index: 2; inset: 0; display: grid; place-items: center; padding: 10px; color: #fff; text-align: center; font: 8px/1.4 var(--mono); }
+.endless-card-image .image-credit { position: absolute; z-index: 2; right: 9px; bottom: 9px; max-width: 55%; overflow: hidden; padding: 0; color: #fff; text-shadow: 0 1px 4px #15251f; text-overflow: ellipsis; white-space: nowrap; font: 6px/1.2 var(--mono); }
+.endless-card-image .image-credit a { color: inherit; }
+.endless-choice-content { position: relative; z-index: 2; display: flex; width: 100%; min-width: 0; flex-direction: column; align-items: flex-start; margin-top: auto; }
+.endless-choice-kind { margin-top: 0; color: #ffffffbf; font: 500 8px var(--mono); letter-spacing: .1em; }
+.endless-choice-content strong { margin-top: 6px; color: #fff; text-shadow: 0 2px 12px #10201dcc; font: 600 clamp(20px, 2.4vw, 29px)/1.08 var(--display); letter-spacing: -.045em; transform: translateY(-4px); }
+.endless-speed { margin-top: 9px; color: #fff; font: 600 17px var(--mono); text-shadow: 0 2px 12px #10201dcc; }
+.endless-speed small { color: #ffffffbf; font-size: 10px; font-weight: 500; }
 .endless-vs { position: absolute; z-index: 3; top: 50%; left: 50%; display: grid; width: 78px; height: 78px; place-items: center; border: 5px solid var(--paper); border-radius: 50%; background: var(--orange); box-shadow: 0 7px 18px #172b2730; color: white; font: 800 24px/1 var(--display); letter-spacing: -.04em; transform: translate(-50%, -50%); }
 .endless-vs.is-entering { animation: endlessVsPop .46s cubic-bezier(.18,.85,.24,1.25) both; }
 .endless-vs.is-visible { opacity: 1; }
 .endless-countdown { position: absolute; z-index: 4; top: 50%; left: 50%; display: grid; place-items: center; transform: translate(-50%, -50%); pointer-events: none; }
 .endless-countdown > span:first-child { display: grid; width: 110px; height: 110px; place-items: center; border: 5px solid var(--paper); border-radius: 50%; background: #172b27ed; box-shadow: 0 9px 25px #172b2740; color: white; font: 800 54px/1 var(--display); animation: endlessCountdownPop .45s cubic-bezier(.18,.85,.24,1.25) both; }
 .endless-countdown.is-go > span:first-child { width: 126px; height: 126px; background: var(--green); color: var(--ink); font-size: 38px; }
-.endless-race-flag { position: absolute; top: -35px; right: -34px; font: 42px/1 "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; transform-origin: 15% 90%; animation: endlessFlagWave .7s ease-in-out infinite alternate; }
 .endless-feedback { display: flex; min-height: 66px; align-items: center; justify-content: space-between; gap: 16px; margin-top: 14px; padding: 11px 15px; border-radius: 8px; background: #f7f7f2; }
 .endless-feedback:empty { display: none; }
 .endless-feedback > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
@@ -102,34 +109,36 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: -.055em; }
 .endless-feedback span { color: #75837d; font-size: 11px; line-height: 1.4; }
 .endless-feedback.is-correct { background: #f1f6e8; }
 .endless-feedback.is-over { background: #fff3ed; }
+.endless-feedback.is-entering { animation: endlessFeedbackIn .34s .1s cubic-bezier(.2,.75,.25,1) both; }
 .endless-feedback .btn { flex: 0 0 auto; padding: 11px 15px; }
 @keyframes endlessObjectLeft { from { opacity: 0; transform: translateX(-48px) scale(.94); } to { opacity: 1; transform: translateX(0) scale(1); } }
 @keyframes endlessObjectRight { from { opacity: 0; transform: translateX(48px) scale(.94); } to { opacity: 1; transform: translateX(0) scale(1); } }
 @keyframes endlessVsPop { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.25) rotate(-18deg); } 65% { opacity: 1; transform: translate(-50%, -50%) scale(1.16) rotate(4deg); } 100% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0); } }
 @keyframes endlessCountdownPop { 0% { opacity: 0; transform: scale(.5) rotate(-9deg); } 65% { opacity: 1; transform: scale(1.13) rotate(3deg); } 100% { opacity: 1; transform: scale(1) rotate(0); } }
-@keyframes endlessFlagWave { from { transform: rotate(-12deg) translateY(2px); } to { transform: rotate(12deg) translateY(-2px); } }
-@media (prefers-reduced-motion: reduce) { .endless-enter-left, .endless-enter-right, .endless-vs.is-entering, .endless-countdown > span:first-child, .endless-race-flag { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
+@keyframes endlessWashIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes endlessPickTap { 0% { transform: scale(1); } 38% { transform: scale(1.035); } 100% { transform: scale(1); } }
+@keyframes endlessFeedbackIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .endless-enter-left, .endless-enter-right, .endless-vs.is-entering, .endless-countdown > span:first-child, .endless-choice.is-revealing .endless-card-image::before, .endless-choice.is-picked-now, .endless-feedback.is-entering { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
 .daily-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
 .daily-head h2 { font-size: clamp(27px, 3.5vw, 38px); margin: 0; }
 .daily-head .count-tag { padding: 8px 12px; font-size: 10px; white-space: nowrap; }
-.daily-question-strip { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 92px; padding: 14px 18px 14px 22px; border-radius: 11px; background: #f3f3ed; }
+.daily-question-strip { position: relative; isolation: isolate; display: flex; align-items: center; min-height: 190px; overflow: hidden; padding: 24px 22px 24px 26px; border-radius: 11px; background: #f3f3ed; }
+.daily-question-copy { position: relative; z-index: 2; width: 61%; max-width: 560px; }
 .daily-question-strip .eyebrow { font-size: 9px; }
 .daily-question-strip h3 { margin: 7px 0 3px; font-size: clamp(24px, 3vw, 34px); }
 .daily-question-strip p { margin: 6px 0 0; color: #7d8983; font-size: 15px; line-height: 1.4; }
-.question-image-wrap.daily-question-image { flex: 0 0 clamp(190px, 26vw, 280px); width: clamp(190px, 26vw, 280px); min-height: 0; justify-items: center; gap: 8px; margin: 0; padding: 0; border-radius: 0; background: transparent; }
-.daily-question-image .question-image { width: 100%; height: 200px; max-height: 200px; object-fit: cover; border-radius: 9px; }
-.daily-question-image .image-loading { max-width: 100%; color: #73816a; text-align: center; font-size: 8px; }
-.daily-question-credit { display: flex; justify-content: flex-end; min-height: 12px; margin: 5px 4px 0; }
-.daily-question-credit .image-credit { max-width: 100%; overflow: hidden; color: #7d887e; text-align: right; text-overflow: ellipsis; white-space: nowrap; font: 8px/1.4 var(--mono); }
-.daily-question-credit .image-credit a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.question-image-wrap.daily-question-image { position: absolute; z-index: 1; top: 0; right: 0; bottom: 0; display: block; width: 51%; overflow: hidden; margin: 0; border-radius: 0; background: #263a34; }
+.daily-question-image::after { position: absolute; z-index: 1; inset: 0; background: linear-gradient(90deg, #f3f3ed 0%, #f3f3edf2 7%, #f3f3ed8c 25%, #15251f12 56%, #15251f08 100%), linear-gradient(0deg, #15251f70 0%, transparent 38%); content: ""; pointer-events: none; }
+.daily-question-image .question-image { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: cover; object-position: center; border-radius: 0; }
+.daily-question-image .image-loading { position: absolute; z-index: 2; inset: 0; display: grid; place-items: center; padding: 10px; color: #fff; text-align: center; font: 8px/1.4 var(--mono); }
+.daily-question-image .image-credit { position: absolute; z-index: 2; right: 9px; bottom: 9px; max-width: 62%; overflow: hidden; padding: 0; background: transparent; color: #fff; text-shadow: 0 1px 4px #15251f; text-overflow: ellipsis; white-space: nowrap; font: 6px/1.2 var(--mono); }
+.daily-question-image .image-credit a { color: inherit; }
 .daily-lanes-wrap { margin-top: 18px; }
 .daily-lanes-wrap .answer-lane .lane-heading { display: none; }
 .daily-lanes-wrap .guess-lane .lane-heading strong { display: none; }
-.daily-unit-row { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
-.daily-unit-row .field-label { margin: 0; }
-.daily-unit-select { width: 100%; height: 42px; padding: 0 12px; font-size: 12px; }
+.daily-unit-row { display: flex; align-items: flex-end; justify-content: flex-end; gap: 0; }
+.daily-unit-switch { width: min(100%, 148px); height: 40px; }
 .daily-control-row { display: grid; grid-template-columns: 160px minmax(0, 1fr) 190px; align-items: end; gap: 14px; margin-top: 22px; }
-.daily-unit-row { flex-direction: column; align-items: stretch; gap: 7px; }
 .daily-guess-control { margin-top: 0; padding: 16px 18px 13px; }
 .daily-guess-control .range-wrap { margin: 14px 0 8px; }
 .daily-submit { margin: 0; min-width: 0; min-height: 48px; padding: 13px 15px; }
@@ -365,27 +374,24 @@ select.input { appearance: none; -webkit-appearance: none; padding-right: 38px; 
   .daily-section { margin: 22px 0 35px; } .daily-game-panel { padding: 18px; }
   .solo-mode-tabs { gap: 18px; margin-bottom: 17px; } .solo-mode-tab { font-size: 12px; padding-bottom: 10px; }
   .endless-head { align-items: flex-start; gap: 12px; } .endless-head h2 { font-size: 27px; } .endless-head p { max-width: 330px; font-size: 12px; }
-  .endless-unit-control { min-width: 94px; } .endless-unit-control .input { height: 36px; font-size: 11px; }
+  .endless-unit-control { min-width: 116px; } .endless-unit-switch { width: 116px; height: 36px; }
   .endless-scoreboard { grid-template-columns: 1fr 1fr; gap: 8px 10px; margin: 15px 0 11px; padding: 10px 12px; }
-  .endless-scoreboard .endless-round-prompt { grid-column: 1 / -1; justify-self: start; font-size: 8px; }
   .endless-pair { gap: 70px; } .endless-choice { min-height: 195px; padding: 13px 13px 14px; }
   .endless-vs { width: 60px; height: 60px; border-width: 4px; font-size: 19px; }
   .endless-countdown > span:first-child { width: 88px; height: 88px; font-size: 44px; }
   .endless-countdown.is-go > span:first-child { width: 100px; height: 100px; font-size: 31px; }
-  .endless-race-flag { top: -29px; right: -28px; font-size: 35px; }
-  .endless-choice-top { height: 100px; min-height: 0; }
-  .endless-choice-kind { margin-top: 9px; font-size: 7px; } .endless-choice strong { font-size: clamp(17px, 4vw, 23px); }
+  .endless-choice-kind { margin-top: 0; font-size: 7px; } .endless-choice-content strong { font-size: clamp(17px, 4vw, 23px); }
   .endless-feedback { align-items: flex-start; padding: 10px 11px; } .endless-feedback .btn { padding: 10px 11px; font-size: 11px; }
   .daily-head { gap: 8px; margin-bottom: 15px; } .daily-head h2 { font-size: 27px; }
   .daily-head .count-tag { padding: 6px 8px; font-size: 8px; }
-  .daily-question-strip { min-height: 78px; padding: 13px 14px; gap: 10px; }
+  .daily-question-strip { min-height: 156px; padding: 17px 14px; }
+  .daily-question-copy { width: 64%; }
   .daily-question-strip h3 { font-size: 24px; } .daily-question-strip p { margin-top: 5px; font-size: 13px; }
-  .daily-question-image { flex-basis: 190px; width: 190px; padding: 0; }
-  .daily-question-image .question-image { height: 136px; }
+  .question-image-wrap.daily-question-image { width: 48%; }
   .daily-lanes-wrap { margin-top: 14px; }
   .daily-control-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); grid-template-areas: "guess guess" "unit submit"; align-items: end; gap: 10px; margin-top: 15px; }
-  .daily-unit-row { grid-area: unit; gap: 6px; } .daily-guess-control { grid-area: guess; padding: 12px 13px 9px; }
-  .daily-unit-select { height: 40px; } .daily-submit { grid-area: submit; width: 100%; }
+  .daily-unit-row { grid-area: unit; justify-content: flex-start; } .daily-guess-control { grid-area: guess; padding: 12px 13px 9px; }
+  .daily-submit { grid-area: submit; width: 100%; }
   .daily-result { margin-top: 14px; padding: 13px; } .daily-result-values { gap: 6px; }
   .daily-result-values div { padding: 9px 7px; } .daily-result-values span { font-size: 11px; }
   .daily-result-values strong { font-size: 10px; }

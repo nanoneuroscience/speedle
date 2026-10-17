@@ -21,6 +21,8 @@ let animationRevealRound = null;
 const healthLevels = new Map();
 const revealedQuestionImages = new Map();
 const questionImageRequests = new Map();
+const questionImageDecodeRequests = new Map();
+const questionImageCreditRequests = new Map();
 let dailyDeckStatus = 'idle';
 let dailyChallenge = null;
 let dailyGuess = null;
@@ -46,6 +48,7 @@ let endlessIntroTimer = null;
 let endlessScore = 0;
 let endlessBest = Number(localStorage.getItem('speedle-endless-best')) || 0;
 let endlessUnitSystem = localStorage.getItem('speedle-endless-units') === 'metric' ? 'metric' : 'imperial';
+let endlessRevealActive = false;
 const questionVisuals = {
   'Peregrine falcon': { icon: '🦅', speed: 240 }, 'Cheetah': { icon: '🐆', speed: 70 },
   'Sailfish': { icon: '🐟', speed: 68 }, 'Ostrich': { icon: '🦤', speed: 43 },
@@ -205,10 +208,9 @@ function dailyPanel() {
   const formattedDate = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${dailyChallenge.day}T00:00:00Z`));
   const resultContent = result
     ? `<div class="daily-result"><div class="daily-score"><strong>${result.accuracy}%</strong><span>ACCURACY</span></div><div class="daily-result-values"><div><span>REAL SPEED</span><strong>${displaySpeed(question.speed, resultUnit)} ${unitShort(resultUnit)}</strong></div><div><span>YOUR GUESS</span><strong>${resultGuess} ${unitShort(resultUnit)}</strong></div><div><span>OFF BY</span><strong>${displaySpeed(Math.abs(result.guess - question.speed), resultUnit)} ${unitShort(resultUnit)}</strong></div></div></div>${dailyCommunityPanel()}<div class="hint daily-reset-hint">Come back tomorrow for a new challenge.</div>`
-    : `<div class="daily-control-row"><div class="daily-unit-row"><label class="field-label" for="daily-unit-system">SPEED UNITS</label><select class="input daily-unit-select" id="daily-unit-system" aria-label="Daily guess speed units"><option value="imperial" ${dailyUnitSystem === 'imperial' ? 'selected' : ''}>Imperial · MPH</option><option value="metric" ${dailyUnitSystem === 'metric' ? 'selected' : ''}>Metric · KM/H</option></select></div><div class="guess-control daily-guess-control"><div class="guess-top"><label for="daily-guess-slider">SET YOUR GUESSED SPEED</label><div class="guess-number"><span id="daily-guess-readout">${value}</span> <small>${unitLabel(dailyUnitSystem)}</small></div></div><div class="range-wrap"><input class="range" id="daily-guess-slider" type="range" min="0" max="${max}" value="${value}" step="1" style="--progress:${value / max * 100}%" aria-label="Set your daily speed guess in ${dailyUnitSystem === 'metric' ? 'kilometres per hour' : 'miles per hour'}"/></div><div class="range-labels"><span>0 ${unitShort(dailyUnitSystem)}</span><span>${max} ${unitShort(dailyUnitSystem)}</span></div></div><button class="btn btn-primary daily-submit" id="daily-submit">Reveal today’s speed</button></div>`;
+    : `<div class="daily-control-row"><div class="daily-unit-row"><div class="endless-unit-switch daily-unit-switch" id="daily-unit-system" role="group" aria-label="Daily Speedle speed units" data-active="${dailyUnitSystem}"><span class="endless-unit-indicator" aria-hidden="true"></span><button class="endless-unit-option ${dailyUnitSystem === 'imperial' ? 'is-active' : ''}" type="button" data-daily-unit="imperial" aria-pressed="${dailyUnitSystem === 'imperial'}">MPH</button><button class="endless-unit-option ${dailyUnitSystem === 'metric' ? 'is-active' : ''}" type="button" data-daily-unit="metric" aria-pressed="${dailyUnitSystem === 'metric'}">KM/H</button></div></div><div class="guess-control daily-guess-control"><div class="guess-top"><label for="daily-guess-slider">SET YOUR GUESSED SPEED</label><div class="guess-number"><span id="daily-guess-readout">${value}</span> <small>${unitLabel(dailyUnitSystem)}</small></div></div><div class="range-wrap"><input class="range" id="daily-guess-slider" type="range" min="0" max="${max}" value="${value}" step="1" style="--progress:${value / max * 100}%" aria-label="Set your daily speed guess in ${dailyUnitSystem === 'metric' ? 'kilometres per hour' : 'miles per hour'}"/></div><div class="range-labels"><span>0 ${unitShort(dailyUnitSystem)}</span><span>${max} ${unitShort(dailyUnitSystem)}</span></div></div><button class="btn btn-primary daily-submit" id="daily-submit">Reveal today’s speed</button></div>`;
   return `<div class="daily-head"><div><h2>Daily Speedle</h2></div><span class="count-tag">${escapeHtml(formattedDate)}</span></div>
-    <div class="daily-question-strip"><div><div class="eyebrow">${escapeHtml(question.kind)}</div><h3>${escapeHtml(question.name)}</h3><p>${result ? escapeHtml(displaySpeedNote(question.note, resultUnit)) : 'What’s its top speed?'}</p></div>${questionImageMarkup(question, 'daily-question-image')}</div>
-    <div class="daily-question-credit" id="daily-question-credit"></div>
+    <div class="daily-question-strip"><div class="daily-question-copy"><div class="eyebrow">${escapeHtml(question.kind)}</div><h3>${escapeHtml(question.name)}</h3><p>${result ? escapeHtml(displaySpeedNote(question.note, resultUnit)) : 'What’s its top speed?'}</p></div>${questionImageMarkup(question, 'daily-question-image')}</div>
     <div class="daily-lanes-wrap">${speedLanes(question, shownGuess, Boolean(result), resultUnit)}</div>${resultContent}`;
 }
 function renderDailyCard() {
@@ -229,15 +231,16 @@ function bindDailyCard() {
   });
   view.querySelector('#daily-community-refresh')?.addEventListener('click', () => void refreshDailyCommunity(false));
   view.querySelector('#daily-community-retry')?.addEventListener('click', () => void refreshDailyCommunity(true));
-  view.querySelector('#daily-unit-system')?.addEventListener('change', event => {
+  view.querySelectorAll('[data-daily-unit]').forEach(button => button.addEventListener('click', () => {
+    if (button.dataset.dailyUnit === dailyUnitSystem) return;
     const oldRange = dailyRange();
     const ratio = oldRange ? Number(dailyGuess) / oldRange : .5;
-    dailyUnitSystem = event.currentTarget.value;
+    dailyUnitSystem = button.dataset.dailyUnit;
     localStorage.setItem('speedle-daily-units', dailyUnitSystem);
     dailyGuess = Math.round(dailyRange() * ratio);
     guessRunnerRate = speedToRunnerRate(dailyGuess, dailyRange());
     renderDailyCard();
-  });
+  }));
   view.querySelector('#daily-guess-slider')?.addEventListener('input', event => {
     dailyGuess = Number(event.currentTarget.value);
     guessRunnerRate = speedToRunnerRate(dailyGuess, dailyRange());
@@ -310,7 +313,7 @@ function drawEndlessPair() {
     endlessPair = shuffled([fallbackFirst, second]);
     endlessSelectedObject = null;
     endlessRoundStatus = 'guessing';
-    endlessIntroPhase = 'left';
+    endlessIntroPhase = 'loading';
     endlessReady = false;
     return;
   }
@@ -319,7 +322,7 @@ function drawEndlessPair() {
   endlessPair = shuffled([first, second]);
   endlessSelectedObject = null;
   endlessRoundStatus = 'guessing';
-  endlessIntroPhase = 'left';
+  endlessIntroPhase = 'loading';
   endlessReady = false;
 }
 function startEndlessGame() {
@@ -330,18 +333,30 @@ function startEndlessGame() {
   endlessError = '';
   drawEndlessPair();
   renderEndlessCard();
+  void prepareEndlessRound();
+}
+async function prepareEndlessRound() {
+  const pair = endlessPair;
+  if (!pair) return;
+  await Promise.all(pair.map(async (item, index) => {
+    await loadQuestionImage(item);
+    if (endlessPair === pair) renderQuestionImage(item.name, `endless-object-image-${index}`);
+  }));
+  if (endlessPair !== pair || endlessIntroPhase !== 'loading') return;
+  endlessIntroPhase = 'left';
+  updateEndlessIntroStage();
   runEndlessIntro();
 }
 function runEndlessIntro() {
   clearTimeout(endlessIntroTimer);
-  const sequence = [['vs', 500], ['right', 450], ['three', 520], ['two', 520], ['one', 520], ['go', 650], ['ready', 0]];
+  const sequence = [['right', 450], ['three', 520], ['two', 520], ['one', 520], ['go', 650], ['ready', 0]];
   let step = 0;
   function advance() {
     if (step >= sequence.length) return;
     const [phase, delay] = sequence[step++];
     endlessIntroPhase = phase;
     endlessReady = phase === 'ready';
-    renderEndlessCard();
+    updateEndlessIntroStage();
     if (delay) endlessIntroTimer = setTimeout(advance, delay);
   }
   endlessIntroTimer = setTimeout(advance, 560);
@@ -361,7 +376,8 @@ function chooseEndlessObject(index) {
   } else {
     endlessRoundStatus = 'over';
   }
-  renderEndlessCard();
+  endlessRevealActive = true;
+  try { renderEndlessCard(); } finally { endlessRevealActive = false; }
 }
 function endlessPanel() {
   if (endlessDeckStatus === 'idle' || endlessDeckStatus === 'loading') return `<div class="daily-loading"><span class="spinner"></span> Loading the speed deck…</div>`;
@@ -375,36 +391,87 @@ function endlessPanel() {
     ? `${escapeHtml(target.name)} is faster. Keep the streak going.`
     : endlessRoundStatus === 'over'
       ? `${escapeHtml(target.name)} was faster. Your streak ends at ${endlessScore}.`
-      : 'Pick the faster object.';
+      : endlessIntroPhase === 'loading' ? 'Getting the images ready…' : 'Pick the faster object.';
   const choices = endlessPair.map((item, index) => {
     const isFaster = item === faster;
     const selected = answered && item === endlessSelectedObject;
     const classNames = ['endless-choice'];
-    const phaseIndex = ['left', 'vs', 'right', 'three', 'two', 'one', 'go', 'ready'].indexOf(endlessIntroPhase);
-    if (index === 0) classNames.push(phaseIndex === 0 ? 'endless-enter-left' : 'endless-visible');
-    else classNames.push(phaseIndex < 2 ? 'endless-hidden' : phaseIndex === 2 ? 'endless-enter-right' : 'endless-visible');
+    const phaseIndex = ['left', 'right', 'three', 'two', 'one', 'go', 'ready'].indexOf(endlessIntroPhase);
+    if (endlessIntroPhase === 'loading') classNames.push('endless-hidden');
+    else if (index === 0) classNames.push(phaseIndex === 0 ? 'endless-enter-left' : 'endless-visible');
+    else classNames.push(phaseIndex < 1 ? 'endless-hidden' : phaseIndex === 1 ? 'endless-enter-right' : 'endless-visible');
     if (answered && isFaster) classNames.push('is-faster');
+    else if (answered) classNames.push('is-slower');
     if (selected && endlessRoundStatus === 'over') classNames.push('is-picked-wrong');
-    const badge = answered ? `<span class="endless-answer-badge">${isFaster ? 'FASTER' : 'SLOWER'}</span>` : '';
-    const speed = answered ? `<span class="endless-speed">${displaySpeed(item.speed, endlessUnitSystem)} <small>${unitShort(endlessUnitSystem)}</small></span>` : `<span class="endless-pick-hint">Choose this one</span>`;
+    if (endlessRevealActive) {
+      classNames.push('is-revealing');
+      if (selected) classNames.push('is-picked-now');
+    }
+    const speed = answered ? `<span class="endless-speed">${displaySpeed(item.speed, endlessUnitSystem)} <small>${unitShort(endlessUnitSystem)}</small></span>` : '';
     const label = answered ? `${item.name}: ${displaySpeed(item.speed, endlessUnitSystem)} ${unitShort(endlessUnitSystem)}` : `Choose ${item.name} as the faster object`;
     const imageId = `endless-object-image-${index}`;
-    return `<button class="${classNames.join(' ')}" type="button" data-endless-choice="${index}" aria-label="${escapeHtml(label)}" ${answered || !endlessReady ? 'disabled' : ''}><div class="endless-choice-top">${badge}${questionImageMarkup(item, imageId)}</div><span class="endless-choice-kind">${escapeHtml(item.kind || 'OBJECT')}</span><strong>${escapeHtml(item.name)}</strong>${speed}</button>`;
+    return `<button class="${classNames.join(' ')}" type="button" data-endless-choice="${index}" aria-label="${escapeHtml(label)}" ${answered || !endlessReady ? 'disabled' : ''}>${questionImageMarkup(item, imageId)}<div class="endless-choice-content"><span class="endless-choice-kind">${escapeHtml(item.kind || 'OBJECT')}</span><strong>${escapeHtml(item.name)}</strong>${speed}</div></button>`;
   }).join('');
-  const phaseIndex = ['left', 'vs', 'right', 'three', 'two', 'one', 'go', 'ready'].indexOf(endlessIntroPhase);
+  const phaseIndex = ['left', 'right', 'three', 'two', 'one', 'go', 'ready'].indexOf(endlessIntroPhase);
   const countdownText = { three: '3', two: '2', one: '1', go: 'GO!' }[endlessIntroPhase];
-  const vsClass = endlessIntroPhase === 'vs' ? 'is-entering' : 'is-visible';
-  const vs = phaseIndex >= 1 ? `<div class="endless-vs ${vsClass}" aria-hidden="true">VS</div>` : '';
-  const flag = endlessIntroPhase === 'go' ? '<span class="endless-race-flag" aria-hidden="true">🏁</span>' : '';
-  const countdown = countdownText ? `<div class="endless-countdown ${endlessIntroPhase === 'go' ? 'is-go' : ''}" role="status" aria-live="assertive"><span>${countdownText}</span>${flag}</div>` : '';
+  const vs = endlessIntroPhase === 'ready' ? '<div class="endless-vs is-visible" aria-hidden="true">VS</div>' : '';
+  const countdown = countdownText ? `<div class="endless-countdown ${endlessIntroPhase === 'go' ? 'is-go' : ''}" role="status" aria-live="assertive"><span>${countdownText}</span></div>` : '';
   const resultClass = endlessRoundStatus === 'correct' ? 'is-correct' : endlessRoundStatus === 'over' ? 'is-over' : '';
   const action = endlessRoundStatus === 'correct'
     ? '<button class="btn btn-primary" id="endless-next">Next pair <span aria-hidden="true">→</span></button>'
     : endlessRoundStatus === 'over'
       ? '<button class="btn btn-primary" id="endless-restart">Play again</button>'
       : '';
-  const readyFlag = !answered && endlessReady ? '<span class="endless-ready-flag" aria-hidden="true">🏁</span>' : '';
-  return `<div class="endless-head"><div><h2>Endless Speedle</h2><p>Choose the faster object. Keep your streak alive.</p></div><label class="endless-unit-control"><span class="field-label">SPEED UNITS</span><select class="input" id="endless-unit-system" aria-label="Endless game speed units" ${endlessReady ? '' : 'disabled'}><option value="imperial" ${endlessUnitSystem === 'imperial' ? 'selected' : ''}>MPH</option><option value="metric" ${endlessUnitSystem === 'metric' ? 'selected' : ''}>KM/H</option></select></label></div><div class="endless-scoreboard"><div><strong>${endlessScore}</strong><span>STREAK</span></div><div><strong>${endlessBest}</strong><span>BEST</span></div><span class="endless-round-prompt">${readyFlag}${answered ? 'SPEEDS REVEALED' : endlessReady ? 'PICK THE FASTER OBJECT' : 'GET READY'}</span></div><div class="endless-stage" data-phase="${escapeHtml(endlessIntroPhase)}"><div class="endless-pair">${choices}</div>${vs}${countdown}</div><div class="endless-feedback ${resultClass}" aria-live="polite"><div><strong>${title}</strong><span>${answered ? message : endlessReady ? message : 'Wait for GO! to make your pick.'}</span></div>${action}</div>`;
+  const feedback = `<div class="endless-feedback ${resultClass} ${endlessRevealActive ? 'is-entering' : ''}" aria-live="polite"><div><strong>${title}</strong><span>${answered ? message : endlessIntroPhase === 'loading' ? message : endlessReady ? message : 'Wait for GO! to make your pick.'}</span></div>${action}</div>`;
+  return `<div class="endless-head"><div><h2>Endless Speedle</h2><p>Choose the faster object. Keep your streak alive.</p></div><div class="endless-unit-control"><div class="endless-unit-switch" id="endless-unit-system" role="group" aria-label="Endless game speed units" data-active="${endlessUnitSystem}"><span class="endless-unit-indicator" aria-hidden="true"></span><button class="endless-unit-option ${endlessUnitSystem === 'imperial' ? 'is-active' : ''}" type="button" data-endless-unit="imperial" aria-pressed="${endlessUnitSystem === 'imperial'}" ${endlessReady ? '' : 'disabled'}>MPH</button><button class="endless-unit-option ${endlessUnitSystem === 'metric' ? 'is-active' : ''}" type="button" data-endless-unit="metric" aria-pressed="${endlessUnitSystem === 'metric'}" ${endlessReady ? '' : 'disabled'}>KM/H</button></div></div></div><div class="endless-scoreboard"><div><strong>${endlessScore}</strong><span>STREAK</span></div><div><strong>${endlessBest}</strong><span>BEST</span></div></div><div class="endless-stage" id="endless-stage" data-phase="${escapeHtml(endlessIntroPhase)}"><div class="endless-pair">${choices}</div>${vs}${countdown}</div>${feedback}`;
+}
+function updateEndlessIntroStage() {
+  const stage = view.querySelector('#endless-stage');
+  if (!stage) return;
+  const phaseIndex = ['left', 'right', 'three', 'two', 'one', 'go', 'ready'].indexOf(endlessIntroPhase);
+  stage.dataset.phase = endlessIntroPhase;
+  stage.querySelectorAll('.endless-choice').forEach((card, index) => {
+    card.classList.remove('endless-hidden', 'endless-visible', 'endless-enter-left', 'endless-enter-right');
+    card.disabled = !endlessReady || endlessRoundStatus !== 'guessing';
+    if (index === 0) card.classList.add(endlessIntroPhase === 'left' ? 'endless-enter-left' : 'endless-visible');
+    else if (phaseIndex < 1) card.classList.add('endless-hidden');
+    else if (phaseIndex === 1) card.classList.add('endless-enter-right');
+    else card.classList.add('endless-visible');
+  });
+  view.querySelectorAll('#endless-unit-system [data-endless-unit]').forEach(button => { button.disabled = !endlessReady; });
+  const feedback = view.querySelector('.endless-feedback span');
+  if (feedback) feedback.textContent = endlessIntroPhase === 'loading' ? 'Getting the images ready…' : endlessReady ? 'Pick the faster object.' : 'Wait for GO! to make your pick.';
+
+  let vs = stage.querySelector('.endless-vs');
+  if (endlessIntroPhase === 'ready') {
+    if (!vs) {
+      stage.insertAdjacentHTML('beforeend', '<div class="endless-vs is-entering" aria-hidden="true">VS</div>');
+      vs = stage.querySelector('.endless-vs');
+    } else {
+      vs.className = 'endless-vs is-visible';
+    }
+  } else {
+    vs?.remove();
+  }
+
+  const countdownText = { three: '3', two: '2', one: '1', go: 'GO!' }[endlessIntroPhase];
+  let countdown = stage.querySelector('.endless-countdown');
+  if (!countdownText) {
+    countdown?.remove();
+    return;
+  }
+  if (!countdown) {
+    stage.insertAdjacentHTML('beforeend', `<div class="endless-countdown ${endlessIntroPhase === 'go' ? 'is-go' : ''}" role="status" aria-live="assertive"><span>${countdownText}</span></div>`);
+    return;
+  }
+  countdown.classList.toggle('is-go', endlessIntroPhase === 'go');
+  const number = countdown.querySelector('span:first-child');
+  if (number?.textContent !== countdownText) {
+    const updatedNumber = document.createElement('span');
+    updatedNumber.textContent = countdownText;
+    if (number) number.replaceWith(updatedNumber);
+    else countdown.prepend(updatedNumber);
+  }
 }
 function renderEndlessCard() {
   const content = view.querySelector('#endless-challenge-content');
@@ -423,13 +490,14 @@ function renderEndlessCard() {
   view.querySelector('#endless-next')?.addEventListener('click', () => {
     drawEndlessPair();
     renderEndlessCard();
-    runEndlessIntro();
+    void prepareEndlessRound();
   });
-  view.querySelector('#endless-unit-system')?.addEventListener('change', event => {
-    endlessUnitSystem = event.currentTarget.value;
+  view.querySelectorAll('[data-endless-unit]').forEach(button => button.addEventListener('click', () => {
+    if (button.disabled || button.dataset.endlessUnit === endlessUnitSystem) return;
+    endlessUnitSystem = button.dataset.endlessUnit;
     localStorage.setItem('speedle-endless-units', endlessUnitSystem);
     renderEndlessCard();
-  });
+  }));
   view.querySelectorAll('[data-endless-choice]').forEach(button => button.addEventListener('click', () => {
     endlessSelectedObject = endlessPair[Number(button.dataset.endlessChoice)];
     chooseEndlessObject(Number(button.dataset.endlessChoice));
@@ -476,11 +544,61 @@ function decodeWikiText(value) {
   element.innerHTML = String(value || '').replace(/<[^>]*>/g, ' ');
   return element.value.replace(/\s+/g, ' ').trim();
 }
+function preloadQuestionImageSource(src) {
+  if (questionImageDecodeRequests.has(src)) return questionImageDecodeRequests.get(src);
+  const request = new Promise(resolve => {
+    const preload = new Image();
+    let settled = false;
+    const finish = loaded => {
+      if (settled) return;
+      settled = true;
+      resolve(loaded);
+    };
+    preload.decoding = 'async';
+    preload.fetchPriority = 'high';
+    preload.referrerPolicy = 'no-referrer';
+    preload.onload = () => {
+      if (typeof preload.decode === 'function') preload.decode().then(() => finish(true), () => finish(preload.naturalWidth > 0));
+      else finish(preload.naturalWidth > 0);
+    };
+    preload.onerror = () => finish(false);
+    preload.src = src;
+    if (preload.complete) {
+      if (preload.naturalWidth > 0) preload.onload();
+      else preload.onerror();
+    }
+  });
+  questionImageDecodeRequests.set(src, request);
+  return request;
+}
+function loadQuestionImageCredit(name, fileName) {
+  if (!fileName || questionImageCreditRequests.has(name)) return questionImageCreditRequests.get(name);
+  const request = (async () => {
+    try {
+      const fileInfo = new URL('https://commons.wikimedia.org/w/api.php');
+      fileInfo.search = new URLSearchParams({ action: 'query', titles: `File:${fileName}`, prop: 'imageinfo', iiprop: 'extmetadata', format: 'json', origin: '*' });
+      const fileResponse = await fetch(fileInfo);
+      if (!fileResponse.ok) return;
+      const fileData = await fileResponse.json();
+      const metadata = Object.values(fileData.query?.pages || {})[0]?.imageinfo?.[0]?.extmetadata || {};
+      const image = revealedQuestionImages.get(name);
+      if (!image) return;
+      image.credit = decodeWikiText(metadata.Artist?.value || metadata.Credit?.value || '');
+      image.license = decodeWikiText(metadata.LicenseShortName?.value || '');
+      view.querySelectorAll('.question-image').forEach(img => {
+        if (img.alt === name) renderQuestionImageCredit(name, img.parentElement.id);
+      });
+    } catch {}
+    finally { questionImageCreditRequests.delete(name); }
+  })();
+  questionImageCreditRequests.set(name, request);
+  return request;
+}
 async function loadQuestionImage(question, containerId = 'question-image') {
   const name = question?.name;
   if (!name) return null;
-  if (revealedQuestionImages.has(name)) return revealedQuestionImages.get(name);
   if (questionImageRequests.has(name)) return questionImageRequests.get(name);
+  if (revealedQuestionImages.has(name)) return revealedQuestionImages.get(name);
   const request = (async () => {
     try {
       const search = new URL('https://en.wikipedia.org/w/api.php');
@@ -490,21 +608,11 @@ async function loadQuestionImage(question, containerId = 'question-image') {
       const searchData = await searchResponse.json();
       const page = Object.values(searchData.query?.pages || {}).find(candidate => candidate.thumbnail?.source && candidate.pageimage);
       if (!page) { revealedQuestionImages.set(name, null); return null; }
-      let credit = '';
-      let license = '';
-      try {
-        const fileInfo = new URL('https://commons.wikimedia.org/w/api.php');
-        fileInfo.search = new URLSearchParams({ action: 'query', titles: `File:${page.pageimage}`, prop: 'imageinfo', iiprop: 'extmetadata', format: 'json', origin: '*' });
-        const fileResponse = await fetch(fileInfo);
-        if (fileResponse.ok) {
-          const fileData = await fileResponse.json();
-          const metadata = Object.values(fileData.query?.pages || {})[0]?.imageinfo?.[0]?.extmetadata || {};
-          credit = decodeWikiText(metadata.Artist?.value || metadata.Credit?.value || '');
-          license = decodeWikiText(metadata.LicenseShortName?.value || '');
-        }
-      } catch {}
-      const image = { src: page.thumbnail.source, pageUrl: page.fullurl, pageTitle: page.title, credit, license };
+      const image = { src: page.thumbnail.source, pageUrl: page.fullurl, pageTitle: page.title, credit: '', license: '' };
       revealedQuestionImages.set(name, image);
+      void loadQuestionImageCredit(name, page.pageimage);
+      const decoded = await preloadQuestionImageSource(image.src);
+      if (!decoded) { revealedQuestionImages.set(name, null); return null; }
       if (state?.current?.name === name && ['guessing', 'reveal', 'finished'].includes(state.phase)) renderQuestionImage(name, 'question-image');
       if (!state && dailyChallenge?.question?.name === name) renderQuestionImage(name, 'daily-question-image');
       return image;
@@ -525,45 +633,54 @@ function renderQuestionImage(name, containerId = 'question-image') {
   if (!image) {
     container.replaceChildren(Object.assign(document.createElement('span'), { className: 'image-loading', textContent: 'Image unavailable' }));
     container.classList.add('image-unavailable');
-    if (containerId === 'daily-question-image') view.querySelector('#daily-question-credit')?.replaceChildren();
     return;
   }
-  if (container.querySelector('.question-image')?.src === image.src) return;
+  if (container.querySelector('.question-image')?.src === image.src) {
+    renderQuestionImageCredit(name, containerId);
+    return;
+  }
   const img = document.createElement('img');
   img.src = image.src;
   img.alt = name;
-  img.loading = 'lazy';
+  img.loading = 'eager';
+  img.decoding = 'async';
+  img.fetchPriority = 'high';
   img.referrerPolicy = 'no-referrer';
   img.className = 'question-image';
-  const isDailyImage = containerId === 'daily-question-image';
   img.addEventListener('error', () => {
     container.replaceChildren(Object.assign(document.createElement('span'), { className: 'image-loading', textContent: 'Image unavailable' }));
     container.classList.add('image-unavailable');
-    if (isDailyImage) view.querySelector('#daily-question-credit')?.replaceChildren();
   }, { once: true });
-  const caption = document.createElement('div');
-  caption.className = 'image-credit';
+  container.replaceChildren(img);
+  renderQuestionImageCredit(name, containerId);
+  container.classList.remove('image-unavailable');
+}
+function renderQuestionImageCredit(name, containerId) {
+  const container = view.querySelector(`#${containerId}`);
+  const image = revealedQuestionImages.get(name);
+  if (!container || !image) return;
+  let caption = container.querySelector('.image-credit');
+  if (!caption) {
+    caption = document.createElement('div');
+    caption.className = 'image-credit';
+    container.append(caption);
+  }
+  caption.replaceChildren();
   if (image.pageUrl) {
     const source = document.createElement('a');
     source.href = image.pageUrl;
     source.target = '_blank';
     source.rel = 'noreferrer';
-    source.textContent = `Image source: ${image.pageTitle}${image.credit ? ` · ${image.credit}` : ''}${image.license ? ` · ${image.license}` : ''}`;
+    const showSourceLabel = containerId === 'question-image';
+    source.textContent = `${showSourceLabel ? 'Image source: ' : ''}${image.pageTitle}${image.credit ? ` · ${image.credit}` : ''}${image.license ? ` · ${image.license}` : ''}`;
     caption.append(source);
   }
-  if (isDailyImage) {
-    container.replaceChildren(img);
-    view.querySelector('#daily-question-credit')?.replaceChildren(caption);
-  } else {
-    container.replaceChildren(img, caption);
-  }
-  container.classList.remove('image-unavailable');
 }
 function questionImageMarkup(question, containerId = 'question-image') {
   const result = revealedQuestionImages.get(question?.name);
   const dailyImage = containerId === 'daily-question-image';
   const endlessImage = containerId.startsWith('endless-object-image-');
-  const className = dailyImage ? 'question-image-wrap daily-question-image' : `question-image-wrap${endlessImage ? ' endless-question-image' : ''}`;
+  const className = dailyImage ? 'question-image-wrap daily-question-image' : `question-image-wrap${endlessImage ? ' endless-card-image' : ''}`;
   return `<div class="${className}" id="${containerId}" aria-live="polite">${result === null ? '<span class="image-loading">Image unavailable</span>' : '<span class="image-loading">Finding an image…</span>'}</div>`;
 }
 async function api(action, body = {}) {
