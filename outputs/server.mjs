@@ -27,13 +27,29 @@ function roomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   return Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
+function objectBlurb(note) {
+  return String(note ?? '')
+    .replace(/\s*\.?\s*Image shows a generic example.*$/i, '')
+    .replace(/\s*[;,]?\s*derived from\b.*$/i, '')
+    .replace(/\b(?:up to|as high as)\s+\d[\d,.]*(?:\s*[–-]\s*\d[\d,.]*)?\s*(?:mph|km\/h|km\/s|m\/s|mi\/h)\b/gi, 'record speeds')
+    .replace(/\s*\([^)]*\b(?:Mach\s*\d|\d[\d,.]*\s*(?:mph|km\/h|km\/s|m\/s|mi\/h))[^)]*\)/gi, '')
+    .replace(/\b(?:about|approximately|roughly|~)\s*\d[\d,.]*(?:\s*[–-]\s*\d[\d,.]*)?\s*(?:mph|km\/h|km\/s|m\/s|mi\/h)\b/gi, '')
+    .replace(/\bMach\s*\d[\d,.]*/gi, '')
+    .replace(/\b\d[\d,.]*(?:\s*[–-]\s*\d[\d,.]*)?\s*(?:mph|km\/h|km\/s|m\/s|mi\/h|c)\b/gi, '')
+    .replace(/:\s*\d[\d,.]*(?:\s*s|:\d{2})\b.*$/i, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.;:])/g, '$1')
+    .replace(/[,;:]\s*$/, '')
+    .replace(/\b(?:at|to|of|for|in|with|by)\s*$/i, '')
+    .trim();
+}
 function safeRoom(room) {
   const answerVisible = room.phase === 'reveal' || room.phase === 'finished';
   return {
     code: room.code, hostId: room.hostId, inviteUrl: `${gameOrigin}/?room=${room.code}`, phase: room.phase, round: room.round,
     startingHealth: room.startingHealth, roundLimit: room.roundLimit, unitSystem: room.unitSystem, deadline: room.deadline, current: room.current ? {
       id: room.current.id, name: room.current.name, kind: room.current.kind, icon: room.current.icon,
-      range: room.current.range, sliderMin: 1, note: answerVisible ? room.current.note : undefined, source: answerVisible ? room.current.source : undefined,
+      range: room.current.range, sliderMin: 1, blurb: objectBlurb(room.current.note), note: answerVisible ? room.current.note : undefined, source: answerVisible ? room.current.source : undefined,
       secondarySource: answerVisible ? room.current.secondarySource : undefined, imagePath: room.current.imagePath,
       imageSourceUrl: room.current.imageSourceUrl, imageCredit: room.current.imageCredit,
       imageLicenseUrl: room.current.imageLicenseUrl,

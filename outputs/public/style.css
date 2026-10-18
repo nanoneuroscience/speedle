@@ -525,3 +525,8 @@ select.input { appearance: none; -webkit-appearance: none; padding-right: 38px; 
 }
 .bookmark-help-card { padding: 24px; }
 .bookmark-help h2 { font-size: 26px; }
+
+/* Object context captions */
+.daily-question-strip .object-blurb { display: -webkit-box; max-width: 440px; overflow: hidden; color: #69766f; font-size: 14px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.endless-object-blurb { display: -webkit-box; max-width: min(72%, 36ch); overflow: hidden; margin: 2px 0 14px; color: #ffffffdc; text-shadow: 0 1px 8px #10201dcc; font: 400 11px/1.35 var(--sans); -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.question-card .question-blurb { display: -webkit-box; max-width: 580px; overflow: hidden; color: #bbc7bf; font-size: 14px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
