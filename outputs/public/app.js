@@ -49,14 +49,6 @@ let endlessScore = 0;
 let endlessBest = Number(localStorage.getItem('speedle-endless-best')) || 0;
 let endlessUnitSystem = localStorage.getItem('speedle-endless-units') === 'metric' ? 'metric' : 'imperial';
 let endlessRevealActive = false;
-const questionVisuals = {
-  'Peregrine falcon': { icon: '🦅', speed: 240 }, 'Cheetah': { icon: '🐆', speed: 70 },
-  'Sailfish': { icon: '🐟', speed: 68 }, 'Ostrich': { icon: '🦤', speed: 43 },
-  'House cat': { icon: '🐈', speed: 30 }, 'Usain Bolt': { icon: '🏃', speed: 28 },
-  'Road bicycle': { icon: '🚴', speed: 60 }, 'Formula 1 car': { icon: '🏎️', speed: 230 },
-  'Boeing 747': { icon: '✈️', speed: 614 }, 'Blue whale': { icon: '🐋', speed: 31 },
-  'Greyhound': { icon: '🐕', speed: 45 }, 'Bullet train': { icon: '🚄', speed: 200 },
-};
 const leftFacingIcons = new Set([
   '🦅', '🐆', '🐟', '🦤', '🐈', '🐋', '🐕', '🦌', '🐅', '🐘', '🦒', '🐎', '🐪',
   '🦘', '🦬', '🦓', '🫎', '🐺', '🐻‍❄️', '🐇', '🦛', '🦏', '🐒', '🐦', '🦆',
@@ -67,14 +59,42 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&'
 const currentPlayer = () => state?.players.find(p => p.id === playerId);
 const isHost = () => state?.hostId === playerId;
 const KMH_PER_MPH = 1.609344;
+const SLIDER_STEPS = 1000;
+const MIN_GUESS_MPH = 1;
 function unitShort(unitSystem = state?.unitSystem) { return unitSystem === 'metric' ? 'km/h' : 'mph'; }
 function unitLabel(unitSystem = state?.unitSystem) { return unitSystem === 'metric' ? 'KM/H' : 'MPH'; }
-function displaySpeed(mph, unitSystem = state?.unitSystem) { return unitSystem === 'metric' ? Math.round(mph * KMH_PER_MPH) : Math.round(mph); }
+function speedInUnit(mph, unitSystem = state?.unitSystem) { return unitSystem === 'metric' ? Number(mph) * KMH_PER_MPH : Number(mph); }
+function formatSpeed(value) {
+  const number = Number(value);
+  const rounded = number >= 100 ? Math.round(number) : number >= 10 ? Number(number.toFixed(1)) : Number(number.toFixed(2));
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: number >= 100 ? 0 : number >= 10 ? 1 : 2 }).format(rounded);
+}
+function displaySpeed(mph, unitSystem = state?.unitSystem) { return formatSpeed(speedInUnit(mph, unitSystem)); }
 function displayRange(question, unitSystem = state?.unitSystem) { return displaySpeed(question.range, unitSystem); }
+function sliderPositionForMph(speedMph, question) {
+  const max = Math.max(MIN_GUESS_MPH + Number.EPSILON, Number(question?.range) || MIN_GUESS_MPH + 1);
+  const bounded = Math.max(MIN_GUESS_MPH, Math.min(max, Number(speedMph)));
+  return Math.round(Math.log(bounded / MIN_GUESS_MPH) / Math.log(max / MIN_GUESS_MPH) * SLIDER_STEPS);
+}
+function mphFromSliderPosition(position, question) {
+  const max = Math.max(MIN_GUESS_MPH + Number.EPSILON, Number(question?.range) || MIN_GUESS_MPH + 1);
+  const ratio = Math.max(0, Math.min(SLIDER_STEPS, Number(position))) / SLIDER_STEPS;
+  return MIN_GUESS_MPH * Math.pow(max / MIN_GUESS_MPH, ratio);
+}
+function displaySliderGuess(position, question, unitSystem = state?.unitSystem) {
+  return formatSpeed(speedInUnit(mphFromSliderPosition(position, question), unitSystem));
+}
+function damageForGuess(guessMph, question) {
+  return Math.min(100, Math.round(Math.abs(sliderPositionForMph(guessMph, question) - sliderPositionForMph(question.speed, question)) / (SLIDER_STEPS / 100)));
+}
+function speedToRunnerRate(speedMph, question) {
+  if (Number(speedMph) <= 0) return 0;
+  const ratio = sliderPositionForMph(speedMph, question) / SLIDER_STEPS;
+  return 0.65 * (0.18 + 1.32 * ratio);
+}
 function displaySpeedNote(note, unitSystem = state?.unitSystem) {
   return String(note ?? '').replace(/(\d[\d,]*(?:\.\d+)?)\s*mph\b/gi, (_, value) => `${displaySpeed(Number(value.replaceAll(',', '')), unitSystem)} ${unitShort(unitSystem)}`);
 }
-function dailyRange() { return dailyChallenge ? displayRange(dailyChallenge.question, dailyUnitSystem) : 0; }
 function dailyResultKey(day) { return `speedle-daily-result-${day}`; }
 function dailyParticipantId(day) {
   const key = `speedle-daily-participant-${day}`;
@@ -115,19 +135,19 @@ async function loadDailyChallenge() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.question === question.name) {
+        if (parsed.questionId === question.id) {
           dailyResult = parsed;
           dailyUnitSystem = parsed.unitSystem === 'metric' ? 'metric' : 'imperial';
-          dailyGuess = displaySpeed(parsed.guess, dailyUnitSystem);
+          dailyGuess = sliderPositionForMph(parsed.guess, question);
         }
       } catch { localStorage.removeItem(dailyResultKey(day)); }
     }
     if (dailyResult) {
-      guessRunnerRate = speedToRunnerRate(dailyResult.guess, question.range);
-      actualRunnerRate = speedToRunnerRate(question.speed, question.range);
+      guessRunnerRate = speedToRunnerRate(dailyResult.guess, question);
+      actualRunnerRate = speedToRunnerRate(question.speed, question);
     } else {
-      if (dailyGuess == null) dailyGuess = Math.round(dailyRange() / 2);
-      guessRunnerRate = speedToRunnerRate(dailyGuess, dailyRange());
+      if (dailyGuess == null) dailyGuess = Math.round(SLIDER_STEPS / 2);
+      guessRunnerRate = speedToRunnerRate(mphFromSliderPosition(dailyGuess, question), question);
       actualRunnerRate = 0;
     }
     scheduleDailyRefresh(effectiveTime);
@@ -199,16 +219,16 @@ function dailyPanel() {
   if (dailyDeckStatus === 'loading' || dailyDeckStatus === 'idle') return `<div class="daily-loading"><span class="spinner"></span> Loading today’s shared challenge…</div>`;
   if (dailyDeckStatus === 'error') return `<div class="daily-loading"><p>${escapeHtml(dailyError || 'Could not load today’s challenge.')}</p><button class="btn btn-primary btn-full" id="daily-retry">Try again</button></div>`;
   const question = dailyChallenge.question;
-  const max = dailyRange();
-  const value = dailyGuess ?? Math.round(max / 2);
+  const max = SLIDER_STEPS;
+  const value = dailyGuess ?? Math.round(SLIDER_STEPS / 2);
   const result = dailyResult;
   const resultUnit = result?.unitSystem || dailyUnitSystem;
   const resultGuess = result ? displaySpeed(result.guess, resultUnit) : null;
-  const shownGuess = result ? resultGuess : value;
+  const shownGuess = result ? resultGuess : displaySliderGuess(value, question, dailyUnitSystem);
   const formattedDate = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${dailyChallenge.day}T00:00:00Z`));
   const resultContent = result
     ? `<div class="daily-result"><div class="daily-score"><strong>${result.accuracy}%</strong><span>ACCURACY</span></div><div class="daily-result-values"><div><span>REAL SPEED</span><strong>${displaySpeed(question.speed, resultUnit)} ${unitShort(resultUnit)}</strong></div><div><span>YOUR GUESS</span><strong>${resultGuess} ${unitShort(resultUnit)}</strong></div><div><span>OFF BY</span><strong>${displaySpeed(Math.abs(result.guess - question.speed), resultUnit)} ${unitShort(resultUnit)}</strong></div></div></div>${dailyCommunityPanel()}<div class="hint daily-reset-hint">Come back tomorrow for a new challenge.</div>`
-    : `<div class="daily-control-row"><div class="daily-unit-row"><div class="endless-unit-switch daily-unit-switch" id="daily-unit-system" role="group" aria-label="Daily Speedle speed units" data-active="${dailyUnitSystem}"><span class="endless-unit-indicator" aria-hidden="true"></span><button class="endless-unit-option ${dailyUnitSystem === 'imperial' ? 'is-active' : ''}" type="button" data-daily-unit="imperial" aria-pressed="${dailyUnitSystem === 'imperial'}">MPH</button><button class="endless-unit-option ${dailyUnitSystem === 'metric' ? 'is-active' : ''}" type="button" data-daily-unit="metric" aria-pressed="${dailyUnitSystem === 'metric'}">KM/H</button></div></div><div class="guess-control daily-guess-control"><div class="guess-top"><label for="daily-guess-slider">SET YOUR GUESSED SPEED</label><div class="guess-number"><span id="daily-guess-readout">${value}</span> <small>${unitLabel(dailyUnitSystem)}</small></div></div><div class="range-wrap"><input class="range" id="daily-guess-slider" type="range" min="0" max="${max}" value="${value}" step="1" style="--progress:${value / max * 100}%" aria-label="Set your daily speed guess in ${dailyUnitSystem === 'metric' ? 'kilometres per hour' : 'miles per hour'}"/></div><div class="range-labels"><span>0 ${unitShort(dailyUnitSystem)}</span><span>${max} ${unitShort(dailyUnitSystem)}</span></div></div><button class="btn btn-primary daily-submit" id="daily-submit">Reveal today’s speed</button></div>`;
+    : `<div class="daily-control-row"><div class="daily-unit-row"><div class="endless-unit-switch daily-unit-switch" id="daily-unit-system" role="group" aria-label="Daily Speedle speed units" data-active="${dailyUnitSystem}"><span class="endless-unit-indicator" aria-hidden="true"></span><button class="endless-unit-option ${dailyUnitSystem === 'imperial' ? 'is-active' : ''}" type="button" data-daily-unit="imperial" aria-pressed="${dailyUnitSystem === 'imperial'}">MPH</button><button class="endless-unit-option ${dailyUnitSystem === 'metric' ? 'is-active' : ''}" type="button" data-daily-unit="metric" aria-pressed="${dailyUnitSystem === 'metric'}">KM/H</button></div></div><div class="guess-control daily-guess-control"><div class="guess-top"><label for="daily-guess-slider">SET YOUR GUESSED SPEED</label><div class="guess-number"><span id="daily-guess-readout">${displaySliderGuess(value, question, dailyUnitSystem)}</span> <small>${unitLabel(dailyUnitSystem)}</small></div></div><div class="range-wrap"><input class="range" id="daily-guess-slider" type="range" min="0" max="${max}" value="${value}" step="1" style="--progress:${value / max * 100}%" aria-label="Set your daily speed guess in ${dailyUnitSystem === 'metric' ? 'kilometres per hour' : 'miles per hour'}"/></div><div class="range-labels"><span>${displaySpeed(MIN_GUESS_MPH, dailyUnitSystem)} ${unitShort(dailyUnitSystem)}</span><span>${displayRange(question, dailyUnitSystem)} ${unitShort(dailyUnitSystem)}</span></div></div><button class="btn btn-primary daily-submit" id="daily-submit">Reveal today’s speed</button></div>`;
   return `<div class="daily-head"><div><h2>Daily Speedle</h2></div><span class="count-tag">${escapeHtml(formattedDate)}</span></div>
     <div class="daily-question-strip"><div class="daily-question-copy"><div class="eyebrow">${escapeHtml(question.kind)}</div><h3>${escapeHtml(question.name)}</h3><p>${result ? escapeHtml(displaySpeedNote(question.note, resultUnit)) : 'What’s its top speed?'}</p></div>${questionImageMarkup(question, 'daily-question-image')}</div>
     <div class="daily-lanes-wrap">${speedLanes(question, shownGuess, Boolean(result), resultUnit)}</div>${resultContent}`;
@@ -233,31 +253,29 @@ function bindDailyCard() {
   view.querySelector('#daily-community-retry')?.addEventListener('click', () => void refreshDailyCommunity(true));
   view.querySelectorAll('[data-daily-unit]').forEach(button => button.addEventListener('click', () => {
     if (button.dataset.dailyUnit === dailyUnitSystem) return;
-    const oldRange = dailyRange();
-    const ratio = oldRange ? Number(dailyGuess) / oldRange : .5;
     dailyUnitSystem = button.dataset.dailyUnit;
     localStorage.setItem('speedle-daily-units', dailyUnitSystem);
-    dailyGuess = Math.round(dailyRange() * ratio);
-    guessRunnerRate = speedToRunnerRate(dailyGuess, dailyRange());
+    guessRunnerRate = speedToRunnerRate(mphFromSliderPosition(dailyGuess ?? SLIDER_STEPS / 2, dailyChallenge.question), dailyChallenge.question);
     renderDailyCard();
   }));
   view.querySelector('#daily-guess-slider')?.addEventListener('input', event => {
     dailyGuess = Number(event.currentTarget.value);
-    guessRunnerRate = speedToRunnerRate(dailyGuess, dailyRange());
+    const question = dailyChallenge.question;
+    guessRunnerRate = speedToRunnerRate(mphFromSliderPosition(dailyGuess, question), question);
     const readout = view.querySelector('#daily-guess-readout');
-    if (readout) readout.textContent = dailyGuess;
-    event.currentTarget.style.setProperty('--progress', `${dailyGuess / Number(event.currentTarget.max) * 100}%`);
+    if (readout) readout.textContent = displaySliderGuess(dailyGuess, question, dailyUnitSystem);
+    event.currentTarget.style.setProperty('--progress', `${dailyGuess / SLIDER_STEPS * 100}%`);
   });
   view.querySelector('#daily-submit')?.addEventListener('click', () => {
     const question = dailyChallenge.question;
-    const canonicalGuess = Number((dailyUnitSystem === 'metric' ? dailyGuess / KMH_PER_MPH : dailyGuess).toFixed(3));
-    const damage = Math.min(100, Math.round(100 * Math.abs(canonicalGuess - question.speed) / question.range));
-    dailyResult = { question: question.name, guess: canonicalGuess, unitSystem: dailyUnitSystem, accuracy: 100 - damage };
+    const canonicalGuess = Number(mphFromSliderPosition(dailyGuess ?? SLIDER_STEPS / 2, question).toPrecision(12));
+    const damage = damageForGuess(canonicalGuess, question);
+    dailyResult = { question: question.name, questionId: question.id, guess: canonicalGuess, unitSystem: dailyUnitSystem, accuracy: 100 - damage };
     localStorage.setItem(dailyResultKey(dailyChallenge.day), JSON.stringify(dailyResult));
     guessRunnerProgress = 0;
     actualRunnerProgress = 0;
-    guessRunnerRate = speedToRunnerRate(canonicalGuess, question.range);
-    actualRunnerRate = speedToRunnerRate(question.speed, question.range);
+    guessRunnerRate = speedToRunnerRate(canonicalGuess, question);
+    actualRunnerRate = speedToRunnerRate(question.speed, question);
     renderDailyCard();
     void refreshDailyCommunity(true);
   });
@@ -517,10 +535,6 @@ function setSoloMode(mode) {
   });
   if (soloMode === 'endless') void loadEndlessDeck();
 }
-function speedToRunnerRate(speed, range) {
-  const ratio = range > 0 ? Math.max(0, Math.min(1, speed / range)) : 0;
-  return speed <= 0 ? 0 : 0.65 * (0.18 + 1.32 * ratio);
-}
 function animateRunner(timestamp) {
   if (!runnerLastFrame) runnerLastFrame = timestamp;
   const delta = Math.min((timestamp - runnerLastFrame) / 1000, 0.05);
@@ -571,50 +585,29 @@ function preloadQuestionImageSource(src) {
   questionImageDecodeRequests.set(src, request);
   return request;
 }
-function loadQuestionImageCredit(name, fileName) {
-  if (!fileName || questionImageCreditRequests.has(name)) return questionImageCreditRequests.get(name);
-  const request = (async () => {
-    try {
-      const fileInfo = new URL('https://commons.wikimedia.org/w/api.php');
-      fileInfo.search = new URLSearchParams({ action: 'query', titles: `File:${fileName}`, prop: 'imageinfo', iiprop: 'extmetadata', format: 'json', origin: '*' });
-      const fileResponse = await fetch(fileInfo);
-      if (!fileResponse.ok) return;
-      const fileData = await fileResponse.json();
-      const metadata = Object.values(fileData.query?.pages || {})[0]?.imageinfo?.[0]?.extmetadata || {};
-      const image = revealedQuestionImages.get(name);
-      if (!image) return;
-      image.credit = decodeWikiText(metadata.Artist?.value || metadata.Credit?.value || '');
-      image.license = decodeWikiText(metadata.LicenseShortName?.value || '');
-      view.querySelectorAll('.question-image').forEach(img => {
-        if (img.alt === name) renderQuestionImageCredit(name, img.parentElement.id);
-      });
-    } catch {}
-    finally { questionImageCreditRequests.delete(name); }
-  })();
-  questionImageCreditRequests.set(name, request);
-  return request;
-}
-async function loadQuestionImage(question, containerId = 'question-image') {
+async function loadQuestionImage(question) {
   const name = question?.name;
   if (!name) return null;
   if (questionImageRequests.has(name)) return questionImageRequests.get(name);
   if (revealedQuestionImages.has(name)) return revealedQuestionImages.get(name);
   const request = (async () => {
     try {
-      const search = new URL('https://en.wikipedia.org/w/api.php');
-      search.search = new URLSearchParams({ action: 'query', generator: 'search', gsrsearch: name, gsrnamespace: '0', gsrwhat: 'text', gsrlimit: '5', prop: 'pageimages|info', piprop: 'thumbnail|name', pithumbsize: '900', inprop: 'url', format: 'json', origin: '*' });
-      const searchResponse = await fetch(search);
-      if (!searchResponse.ok) { revealedQuestionImages.set(name, null); return null; }
-      const searchData = await searchResponse.json();
-      const page = Object.values(searchData.query?.pages || {}).find(candidate => candidate.thumbnail?.source && candidate.pageimage);
-      if (!page) { revealedQuestionImages.set(name, null); return null; }
-      const image = { src: page.thumbnail.source, pageUrl: page.fullurl, pageTitle: page.title, credit: '', license: '' };
+      if (!question.imagePath) throw new Error('No image for this question.');
+      const image = {
+        src: question.imagePath,
+        pageUrl: question.imageSourceUrl || '',
+        credit: question.imageCredit || '',
+        licenseUrl: question.imageLicenseUrl || '',
+      };
       revealedQuestionImages.set(name, image);
-      void loadQuestionImageCredit(name, page.pageimage);
       const decoded = await preloadQuestionImageSource(image.src);
       if (!decoded) { revealedQuestionImages.set(name, null); return null; }
       if (state?.current?.name === name && ['guessing', 'reveal', 'finished'].includes(state.phase)) renderQuestionImage(name, 'question-image');
       if (!state && dailyChallenge?.question?.name === name) renderQuestionImage(name, 'daily-question-image');
+      if (!state && endlessPair?.some(item => item.name === name)) {
+        const index = endlessPair.findIndex(item => item.name === name);
+        renderQuestionImage(name, `endless-object-image-${index}`);
+      }
       return image;
     } catch {
       revealedQuestionImages.set(name, null);
@@ -658,7 +651,7 @@ function renderQuestionImage(name, containerId = 'question-image') {
 function renderQuestionImageCredit(name, containerId) {
   const container = view.querySelector(`#${containerId}`);
   const image = revealedQuestionImages.get(name);
-  if (!container || !image) return;
+  if (!container || !image || (!image.pageUrl && !image.licenseUrl)) return;
   let caption = container.querySelector('.image-credit');
   if (!caption) {
     caption = document.createElement('div');
@@ -671,9 +664,19 @@ function renderQuestionImageCredit(name, containerId) {
     source.href = image.pageUrl;
     source.target = '_blank';
     source.rel = 'noreferrer';
-    const showSourceLabel = containerId === 'question-image';
-    source.textContent = `${showSourceLabel ? 'Image source: ' : ''}${image.pageTitle}${image.credit ? ` · ${image.credit}` : ''}${image.license ? ` · ${image.license}` : ''}`;
+    source.textContent = image.credit || new URL(image.pageUrl).hostname.replace(/^www\./, '');
     caption.append(source);
+  } else if (image.credit) {
+    caption.append(document.createTextNode(image.credit));
+  }
+  if (image.licenseUrl) {
+    if (caption.childNodes.length) caption.append(document.createTextNode(' · '));
+    const license = document.createElement('a');
+    license.href = image.licenseUrl;
+    license.target = '_blank';
+    license.rel = 'noreferrer';
+    license.textContent = 'License';
+    caption.append(license);
   }
 }
 function questionImageMarkup(question, containerId = 'question-image') {
@@ -703,21 +706,20 @@ function receiveState(nextState) {
   if (nextState.phase === 'guessing' && nextState.round !== guessRound) {
     guessRound = nextState.round;
     animationRevealRound = null;
-    localGuess = Math.round(displayRange(nextState.current) / 2);
+    localGuess = Math.round(SLIDER_STEPS / 2);
     guessRunnerProgress = 0;
     actualRunnerProgress = 0;
-    guessRunnerRate = speedToRunnerRate(localGuess, displayRange(nextState.current));
+    guessRunnerRate = speedToRunnerRate(mphFromSliderPosition(localGuess, nextState.current), nextState.current);
     actualRunnerRate = 0;
   }
   if ((nextState.phase === 'reveal' || nextState.phase === 'finished') && animationRevealRound !== nextState.round) {
     animationRevealRound = nextState.round;
     const submittedGuess = nextState.players.find(p => p.id === playerId)?.guess;
-    const visual = questionVisuals[nextState.current?.name] || {};
-    const actualSpeed = nextState.current?.speed ?? visual.speed;
+    const actualSpeed = nextState.current?.speed;
     guessRunnerProgress = 0;
     actualRunnerProgress = 0;
-    guessRunnerRate = submittedGuess == null ? 0 : speedToRunnerRate(submittedGuess, nextState.current.range);
-    actualRunnerRate = actualSpeed == null ? 0 : speedToRunnerRate(actualSpeed, nextState.current.range);
+    guessRunnerRate = submittedGuess == null ? 0 : speedToRunnerRate(submittedGuess, nextState.current);
+    actualRunnerRate = actualSpeed == null ? 0 : speedToRunnerRate(actualSpeed, nextState.current);
   }
   state = nextState;
   render();
@@ -814,12 +816,11 @@ function lobby() {
 }
 function speedEnvironment(question) {
   const kind = question.kind.toLowerCase();
-  if (kind.includes('spacecraft')) return 'space';
-  if (['ocean', 'watercraft', 'sailboat', 'hydroplane'].some(term => kind.includes(term))) return 'ocean';
-  if (kind.includes('aquatic mammal')) return 'ocean';
+  if (kind.includes('space')) return 'space';
+  if (['sea', 'ocean', 'watercraft', 'sailboat', 'hydroplane', 'aquatic'].some(term => kind.includes(term))) return 'ocean';
   if (kind.includes('rail')) return 'rail';
-  if (['bird', 'aircraft', 'fighter jet', 'insect', 'gliding mammal'].some(term => kind.includes(term))) return 'sky';
-  if (['car', 'motorcycle', 'bicycle', 'e-bike', 'scooter', 'low-speed vehicle', 'power mobility', 'golf cart', 'world record'].some(term => kind.includes(term))) return 'road';
+  if (['air', 'bird', 'aircraft', 'jet', 'insect', 'weather'].some(term => kind.includes(term))) return 'sky';
+  if (['machine', 'vehicle', 'historic', 'record', 'car', 'motorcycle', 'bicycle', 'sports'].some(term => kind.includes(term))) return 'road';
   return 'field';
 }
 function environmentDetails(environment) {
@@ -836,12 +837,11 @@ function environmentDetails(environment) {
   ).join('');
 }
 function speedLanes(question, guess, revealed, unitSystem = state?.unitSystem) {
-  const visual = questionVisuals[question.name] || {};
-  const rawIcon = question.icon || visual.icon || '🏁';
+  const rawIcon = question.icon || '🏁';
   const icon = escapeHtml(rawIcon);
   const iconFacingClass = leftFacingIcons.has(rawIcon) ? ' turn-right' : '';
   const environment = speedEnvironment(question);
-  const actualSpeed = question.speed ?? visual.speed;
+  const actualSpeed = question.speed;
   const range = displayRange(question, unitSystem);
   const actualDisplaySpeed = actualSpeed == null ? null : displaySpeed(actualSpeed, unitSystem);
   return `<div class="speed-lanes">
@@ -859,7 +859,7 @@ function gameView() {
   const me = currentPlayer();
   if (state.phase === 'finished') {
     loadQuestionImage(state.current);
-    return `<div class="game-layout round-layout"><section class="game-main"><div class="game-head"><div><div class="eyebrow"><span class="bar"></span> GAME OVER · ROOM ${state.code}</div><h1>The race is over.</h1></div><div class="room-code"><small>FINAL ROUND</small>${state.round}</div></div><div class="question-card reveal-card final-question-card"><div class="eyebrow"><span class="bar"></span> ${escapeHtml(state.current?.kind)}</div><div class="question-title-row"><h2>${escapeHtml(state.current?.name)}</h2>${state.current?.speed != null ? `<strong class="question-speed-reveal">${displaySpeed(state.current.speed)} ${unitShort()}</strong>` : ''}</div>${questionImageMarkup(state.current)}</div><div class="panel winner-panel"><div class="trophy">🏆</div><div class="eyebrow" style="justify-content:center;margin-top:16px">LAST ONE STANDING</div><h2>${escapeHtml(state.winner?.name || 'No winner')}</h2><p>Outlasted the whole crew and crossed the finish line.</p><div class="player-health-big">${state.winner ? state.players.find(p => p.id === state.winner.id)?.health : 0} <span style="font:12px var(--mono);color:#7e8b82">HP LEFT</span></div><div class="winner-actions">${isHost() ? '<button class="btn btn-primary" id="play-again">Play again</button>' : '<p class="wait-note">You’ll stay in this room while the host decides whether to play again.</p>'}<button class="btn" id="leave-game">Back to home</button></div></div></section><aside class="sidebar"><div class="side-card"><div class="side-title">FINAL HEALTH</div>${healthList(state.players)}</div></aside></div>`;
+    return `<div class="game-layout round-layout"><section class="game-main"><div class="game-head"><div><div class="eyebrow"><span class="bar"></span> GAME OVER · ROOM ${state.code}</div><h1>The race is over.</h1></div><div class="room-code"><small>FINAL ROUND</small>${state.round}</div></div><div class="question-card reveal-card final-question-card"><div class="eyebrow"><span class="bar"></span> ${escapeHtml(state.current?.kind)}</div><div class="question-title-row"><h2>${escapeHtml(state.current?.name)}</h2>${state.current?.speed != null ? `<strong class="question-speed-reveal">${displaySpeed(state.current.speed)} ${unitShort()}</strong>` : ''}</div><p>${escapeHtml(displaySpeedNote(state.current?.note))}</p>${questionImageMarkup(state.current)}</div><div class="panel winner-panel"><div class="trophy">🏆</div><div class="eyebrow" style="justify-content:center;margin-top:16px">LAST ONE STANDING</div><h2>${escapeHtml(state.winner?.name || 'No winner')}</h2><p>Outlasted the whole crew and crossed the finish line.</p><div class="player-health-big">${state.winner ? state.players.find(p => p.id === state.winner.id)?.health : 0} <span style="font:12px var(--mono);color:#7e8b82">HP LEFT</span></div><div class="winner-actions">${isHost() ? '<button class="btn btn-primary" id="play-again">Play again</button>' : '<p class="wait-note">You’ll stay in this room while the host decides whether to play again.</p>'}<button class="btn" id="leave-game">Back to home</button></div></div></section><aside class="sidebar"><div class="side-card"><div class="side-title">FINAL HEALTH</div>${healthList(state.players)}</div></aside></div>`;
   }
   const guessing = state.phase === 'guessing'; const reveal = state.phase === 'reveal';
   const submitted = me?.submitted;
@@ -868,12 +868,13 @@ function gameView() {
   const question = state.current;
   loadQuestionImage(question);
   const maxGuess = displayRange(question);
+  const guessPosition = localGuess ?? Math.round(SLIDER_STEPS / 2);
   const seconds = state.deadline ? Math.max(0, Math.ceil((state.deadline - Date.now()) / 1000)) : 0;
-  const guess = guessing ? (localGuess ?? Math.round(maxGuess / 2)) : me?.guess == null ? null : displaySpeed(me.guess);
+  const guess = guessing ? displaySliderGuess(guessPosition, question) : me?.guess == null ? null : displaySpeed(me.guess);
   return `<div class="game-layout round-layout"><section class="game-main">
     <div class="game-head"><div><div class="eyebrow"><span class="bar"></span> ROUND ${String(state.round).padStart(2,'0')} · ${guessing ? 'MAKE YOUR GUESS' : 'ROUND RECAP'}</div><h1>${guessing ? 'How fast is it?' : 'The answer is in.'}</h1></div><button class="room-code" id="copy-code"><small>ROOM CODE</small>${state.code}</button></div>
     <div class="question-card ${reveal ? 'reveal-card' : ''}"><div class="eyebrow"><span class="bar"></span> ${escapeHtml(question.kind)}</div><div class="question-title-row"><h2>${escapeHtml(question.name)}</h2>${reveal && question.speed != null ? `<strong class="question-speed-reveal">${displaySpeed(question.speed)} ${unitShort()}</strong>` : ''}</div><p>${reveal ? escapeHtml(displaySpeedNote(question.note)) : 'What’s its top speed?'}</p>${questionImageMarkup(question)}${guessing ? `<div class="timer">◷ &nbsp; <span id="timer-value">${seconds}</span> SEC</div>` : ''}</div>
-    ${guessing ? `<div class="panel guess-card">${speedLanes(question, guess, false)}<div class="guess-control"><div class="guess-top"><label for="guess-slider">SET YOUR GUESSED SPEED</label><div class="guess-number"><span id="slider-value">${guess}</span> <small>${unitLabel()}</small></div></div><div class="range-wrap"><input class="range" id="guess-slider" type="range" min="0" max="${maxGuess}" value="${guess}" style="--progress:${guess / maxGuess * 100}%" step="1" aria-label="Set your speed guess in ${state.unitSystem === 'metric' ? 'kilometres per hour' : 'miles per hour'}" ${!me?.alive || submitted ? 'disabled' : ''}/></div><div class="range-labels"><span>0 ${unitShort()}</span><span>${maxGuess} ${unitShort()}</span></div></div><div class="guess-actions">${me?.alive ? (submitted ? `<span class="submit-message">✓ Guess locked in — waiting for the others</span>` : `<span class="submit-message" id="submit-message">${doneCount} of ${alivePlayers.length} guesses in</span><button class="btn btn-primary submit-btn" id="submit-guess">Lock it in  ↗</button>`) : `<span class="submit-message">You’re out — watch the rest of the race.</span>`}</div></div>` : `<div class="panel recap-panel">${speedLanes(question, guess, true)}<div class="panel-top"><div><div class="eyebrow">GUESS RECAP</div><h2 style="font-size:23px;margin:8px 0 0">Who was closest?</h2></div><span class="count-tag">${alivePlayers.length} STILL RACING</span></div><div class="results-list">${state.players.map(p => `<div class="result-row"><span>${escapeHtml(p.name)}${p.id === playerId ? ' (you)' : ''}${p.alive ? '' : ' · OUT'}</span><span class="result-guess">${p.guess == null ? '—' : `${displaySpeed(p.guess)} ${unitShort()}`}</span><span class="${p.damage === 0 ? 'safe' : 'damage'}">${p.damage == null ? '' : p.damage === 0 ? 'PERFECT' : `−${p.damage} HP`}</span></div>`).join('')}</div>${isHost() && reveal ? `<div class="room-actions"><button class="btn btn-primary btn-full" id="next-round">Next round  →</button></div>` : reveal ? `<div class="wait-note">Waiting for the host to start the next round…</div>` : ''}</div>`}
+    ${guessing ? `<div class="panel guess-card">${speedLanes(question, guess, false)}<div class="guess-control"><div class="guess-top"><label for="guess-slider">SET YOUR GUESSED SPEED</label><div class="guess-number"><span id="slider-value">${guess}</span> <small>${unitLabel()}</small></div></div><div class="range-wrap"><input class="range" id="guess-slider" type="range" min="0" max="${SLIDER_STEPS}" value="${guessPosition}" style="--progress:${guessPosition / SLIDER_STEPS * 100}%" step="1" aria-label="Set your speed guess in ${state.unitSystem === 'metric' ? 'kilometres per hour' : 'miles per hour'}" ${!me?.alive || submitted ? 'disabled' : ''}/></div><div class="range-labels"><span>${displaySpeed(MIN_GUESS_MPH)} ${unitShort()}</span><span>${maxGuess} ${unitShort()}</span></div></div><div class="guess-actions">${me?.alive ? (submitted ? `<span class="submit-message">✓ Guess locked in — waiting for the others</span>` : `<span class="submit-message" id="submit-message">${doneCount} of ${alivePlayers.length} guesses in</span><button class="btn btn-primary submit-btn" id="submit-guess">Lock it in  ↗</button>`) : `<span class="submit-message">You’re out — watch the rest of the race.</span>`}</div></div>` : `<div class="panel recap-panel">${speedLanes(question, guess, true)}<div class="panel-top"><div><div class="eyebrow">GUESS RECAP</div><h2 style="font-size:23px;margin:8px 0 0">Who was closest?</h2></div><span class="count-tag">${alivePlayers.length} STILL RACING</span></div><div class="results-list">${state.players.map(p => `<div class="result-row"><span>${escapeHtml(p.name)}${p.id === playerId ? ' (you)' : ''}${p.alive ? '' : ' · OUT'}</span><span class="result-guess">${p.guess == null ? '—' : `${displaySpeed(p.guess)} ${unitShort()}`}</span><span class="${p.damage === 0 ? 'safe' : 'damage'}">${p.damage == null ? '' : p.damage === 0 ? 'PERFECT' : `−${p.damage} HP`}</span></div>`).join('')}</div>${isHost() && reveal ? `<div class="room-actions"><button class="btn btn-primary btn-full" id="next-round">Next round  →</button></div>` : reveal ? `<div class="wait-note">Waiting for the host to start the next round…</div>` : ''}</div>`}
     </section><aside class="sidebar"><div class="side-card"><div class="panel-top"><div class="side-title" style="margin:0">HEALTH CHECK</div><span class="online-count"><i></i>${alivePlayers.length} ALIVE</span></div><div style="height:15px"></div>${healthList(state.players)}</div><div class="side-card"><div class="side-title">DAMAGE METER</div><div class="callout">The closer your slider is to the answer, the less health you lose. A perfect guess costs <strong>0 HP</strong>. ${guessing ? 'Miss the entire slider range and lose up to 100 HP.' : 'A missed guess at time runs out costs 100 HP.'}</div></div></aside></div>`;
 }
 function render() {
@@ -923,14 +924,15 @@ function render() {
   slider?.addEventListener('input', () => {
     const value = Number(slider.value);
     localGuess = value;
+    const shownGuess = displaySliderGuess(value, state.current);
     const readout = view.querySelector('#slider-value');
-    if (readout) readout.textContent = String(value);
+    if (readout) readout.textContent = shownGuess;
     const laneReadout = view.querySelector('#lane-guess-value');
-    if (laneReadout) laneReadout.textContent = `${value} ${unitLabel()}`;
-    guessRunnerRate = speedToRunnerRate(value, Number(slider.max));
-    slider.style.setProperty('--progress', `${value / Number(slider.max) * 100}%`);
+    if (laneReadout) laneReadout.textContent = `${shownGuess} ${unitLabel()}`;
+    guessRunnerRate = speedToRunnerRate(mphFromSliderPosition(value, state.current), state.current);
+    slider.style.setProperty('--progress', `${value / SLIDER_STEPS * 100}%`);
   });
-  view.querySelector('#submit-guess')?.addEventListener('click', async () => { const button = view.querySelector('#submit-guess'); button.disabled = true; button.textContent = 'Locking…'; try { await api('guess', { code: roomCode, playerId, guess: Number(slider.value) }); } catch(e) { notify(e.message); } });
+  view.querySelector('#submit-guess')?.addEventListener('click', async () => { const button = view.querySelector('#submit-guess'); button.disabled = true; button.textContent = 'Locking…'; try { const guess = Number(mphFromSliderPosition(Number(slider.value), state.current).toPrecision(12)); await api('guess', { code: roomCode, playerId, guess }); } catch(e) { notify(e.message); } });
   clearInterval(clockTicker);
   if (state.phase === 'guessing') clockTicker = setInterval(() => { const timer = view.querySelector('#timer-value'); if (timer && state?.deadline) timer.textContent = Math.max(0, Math.ceil((state.deadline - Date.now()) / 1000)); }, 250);
 }

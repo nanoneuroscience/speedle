@@ -8,7 +8,7 @@ body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(
 .app-shell { max-width: 1240px; margin: auto; padding: 0 46px; }
 .topbar { height: 78px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
 .brand { display: flex; align-items: center; gap: 10px; padding: 5px 13px 5px 8px; border-radius: 4px; background: #f4b299; color: var(--ink); font: 700 12px var(--mono); letter-spacing: .12em; text-decoration: none; }
-.brand-animal { display: grid; place-items: center; width: 34px; height: 34px; overflow: visible; font: 32px/1 "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; filter: grayscale(1) brightness(0); transform: scaleX(-1); }
+.brand-animal { display: block; flex: 0 0 auto; width: 60px; height: 34px; object-fit: cover; object-position: center; overflow: hidden; transform: scaleX(-1); }
 .top-right, .eyebrow, .footer { font: 500 10px var(--mono); letter-spacing: .12em; }
 .top-right { display: flex; align-items: center; gap: 9px; color: var(--muted); }
 .live-dot { width: 7px; height: 7px; background: #62ba59; border-radius: 50%; box-shadow: 0 0 0 3px #62ba5922; }

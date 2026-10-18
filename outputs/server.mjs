@@ -7,184 +7,38 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 4173);
+const HOST = process.env.HOST || '0.0.0.0';
 const rooms = new Map();
 const streams = new Map();
 const scoreDataDir = process.env.SPEEDLE_DATA_DIR || path.join(os.tmpdir(), 'speedle-data');
 const scoreDataFile = path.join(scoreDataDir, 'daily-scores.json');
 let dailyScoreStore = null;
 let dailyScoreStoreDay = null;
+let dailyScoreStoreQuestionId = null;
 let dailyScoreWrites = Promise.resolve();
 const lanAddress = Object.values(os.networkInterfaces()).flat().find(x => x && x.family === 'IPv4' && !x.internal)?.address || 'localhost';
 const gameOrigin = (process.env.PUBLIC_URL || 'https://speedle.lol').replace(/\/+$/, '');
 const dailyDeck = JSON.parse(await readFile(path.join(here, 'public', 'daily-deck.json'), 'utf8'));
 if (!Array.isArray(dailyDeck) || !dailyDeck.length) throw new Error('The daily question deck is empty.');
 
-const deck = [
-  { name: 'Peregrine falcon', kind: 'ANIMAL · BIRD', icon: '🦅', speed: 240, range: 300, note: 'In a hunting dive, a peregrine falcon can reach extraordinary speeds.' },
-  { name: 'Cheetah', kind: 'ANIMAL · LAND', icon: '🐆', speed: 70, range: 120, note: 'The fastest land animal over short distances.' },
-  { name: 'Sailfish', kind: 'ANIMAL · OCEAN', icon: '🐟', speed: 68, range: 120, note: 'Often cited among the ocean’s fastest swimmers.' },
-  { name: 'Ostrich', kind: 'ANIMAL · BIRD', icon: '🦤', speed: 43, range: 80, note: 'The world’s largest living bird is also a very fast runner.' },
-  { name: 'House cat', kind: 'ANIMAL · LAND', icon: '🐈', speed: 30, range: 60, note: 'A sprinting house cat can briefly outrun most people.' },
-  { name: 'Usain Bolt', kind: 'HUMAN · SPRINTER', icon: '🏃', speed: 28, range: 60, note: 'His peak speed during the 100 m world-record run.' },
-  { name: 'Road bicycle', kind: 'OBJECT · HUMAN POWER', icon: '🚴', speed: 60, range: 120, note: 'A top-level sprint on a flat road can reach this neighborhood.' },
-  { name: 'Formula 1 car', kind: 'OBJECT · MOTORSPORT', icon: '🏎️', speed: 230, range: 300, note: 'Top speeds vary by circuit, setup, and conditions.' },
-  { name: 'Boeing 747', kind: 'OBJECT · AIRCRAFT', icon: '✈️', speed: 614, range: 800, note: 'Approximate cruising speed at altitude.' },
-  { name: 'Blue whale', kind: 'ANIMAL · OCEAN', icon: '🐋', speed: 31, range: 60, note: 'A blue whale can move surprisingly quickly for its size.' },
-  { name: 'Greyhound', kind: 'ANIMAL · LAND', icon: '🐕', speed: 45, range: 80, note: 'Built for acceleration and short, fast runs.' },
-  { name: 'Bullet train', kind: 'OBJECT · RAIL', icon: '🚄', speed: 200, range: 300, note: 'A representative high-speed service speed.' },
-  // More animals
-  { name: 'Pronghorn', kind: 'ANIMAL · LAND', icon: '🦌', speed: 60, range: 90, note: 'North America’s fastest land mammal can reach this speed.' },
-  { name: 'Lioness', kind: 'ANIMAL · LAND', icon: '🦁', speed: 33, range: 70, note: 'A short sprint can reach about this speed.' },
-  { name: 'Tiger', kind: 'ANIMAL · LAND', icon: '🐅', speed: 40, range: 70, note: 'A tiger can sprint quickly over short distances.' },
-  { name: 'African elephant', kind: 'ANIMAL · LAND', icon: '🐘', speed: 25, range: 60, note: 'Elephants can move into a surprisingly brisk charge.' },
-  { name: 'Giraffe', kind: 'ANIMAL · LAND', icon: '🦒', speed: 35, range: 70, note: 'A running giraffe can briefly reach this speed.' },
-  { name: 'Thoroughbred horse', kind: 'ANIMAL · LAND', icon: '🐎', speed: 55, range: 90, note: 'A racehorse can reach this speed in a sprint.' },
-  { name: 'Dromedary camel', kind: 'ANIMAL · LAND', icon: '🐪', speed: 40, range: 80, note: 'A racing camel can reach this speed over a short stretch.' },
-  { name: 'Red kangaroo', kind: 'ANIMAL · LAND', icon: '🦘', speed: 44, range: 80, note: 'Its powerful hind legs can propel it in long bounds.' },
-  { name: 'Wildebeest', kind: 'ANIMAL · LAND', icon: '🦬', speed: 50, range: 90, note: 'Wildebeest rely on speed to escape predators on open plains.' },
-  { name: 'Plains zebra', kind: 'ANIMAL · LAND', icon: '🦓', speed: 40, range: 80, note: 'A zebra can sprint quickly when fleeing danger.' },
-  { name: 'Elk', kind: 'ANIMAL · LAND', icon: '🫎', speed: 45, range: 80, note: 'Despite their size, elk are capable runners.' },
-  { name: 'Reindeer', kind: 'ANIMAL · LAND', icon: '🦌', speed: 50, range: 90, note: 'Reindeer can cover ground quickly while migrating.' },
-  { name: 'Coyote', kind: 'ANIMAL · LAND', icon: '🐺', speed: 43, range: 80, note: 'Coyotes can accelerate into a fast short sprint.' },
-  { name: 'Gray wolf', kind: 'ANIMAL · LAND', icon: '🐺', speed: 38, range: 70, note: 'Wolves combine short bursts with long-distance travel.' },
-  { name: 'Brown bear', kind: 'ANIMAL · LAND', icon: '🐻', speed: 35, range: 70, note: 'A bear can run much faster than its bulky build suggests.' },
-  { name: 'Polar bear', kind: 'ANIMAL · LAND', icon: '🐻‍❄️', speed: 25, range: 60, note: 'Polar bears can sprint over short distances on land.' },
-  { name: 'Cottontail rabbit', kind: 'ANIMAL · LAND', icon: '🐇', speed: 25, range: 60, note: 'A rabbit’s quick zigzag sprint helps it escape predators.' },
-  { name: 'Black-tailed jackrabbit', kind: 'ANIMAL · LAND', icon: '🐇', speed: 45, range: 80, note: 'Long legs help this hare-like runner escape across open ground.' },
-  { name: 'Hippopotamus', kind: 'ANIMAL · LAND', icon: '🦛', speed: 19, range: 50, note: 'Hippos can charge quickly despite their massive size.' },
-  { name: 'White rhinoceros', kind: 'ANIMAL · LAND', icon: '🦏', speed: 31, range: 60, note: 'A charging rhino can move at a fast running pace.' },
-  { name: 'Gorilla', kind: 'ANIMAL · LAND', icon: '🦍', speed: 20, range: 50, note: 'A gorilla can run in a short burst when moving quickly.' },
-  { name: 'Chimpanzee', kind: 'ANIMAL · LAND', icon: '🐒', speed: 25, range: 60, note: 'On the ground, a chimpanzee can sprint on all fours.' },
-  { name: 'Patas monkey', kind: 'ANIMAL · LAND', icon: '🐒', speed: 34, range: 70, note: 'This ground-dwelling primate is one of the fastest monkeys.' },
-  { name: 'Impala', kind: 'ANIMAL · LAND', icon: '🦌', speed: 55, range: 90, note: 'Impala use fast sprints and leaps to evade predators.' },
-  { name: 'Springbok', kind: 'ANIMAL · LAND', icon: '🦌', speed: 55, range: 90, note: 'This antelope can sprint and make high bouncing leaps.' },
-  { name: 'Goitered gazelle', kind: 'ANIMAL · LAND', icon: '🦌', speed: 60, range: 100, note: 'A recorded top speed for this gazelle is around 60 mph.' },
-  { name: 'Mule deer', kind: 'ANIMAL · LAND', icon: '🦌', speed: 35, range: 70, note: 'Mule deer can bound away from danger at a quick pace.' },
-  { name: 'Golden eagle (dive)', kind: 'ANIMAL · BIRD', icon: '🦅', speed: 150, range: 250, note: 'A diving eagle can travel far faster than it flies level.' },
-  { name: 'Red-tailed hawk (dive)', kind: 'ANIMAL · BIRD', icon: '🦅', speed: 120, range: 200, note: 'This is a short diving speed, not its everyday flight pace.' },
-  { name: 'Common swift', kind: 'ANIMAL · BIRD', icon: '🐦', speed: 70, range: 120, note: 'A swift can maintain a fast pace in level flight.' },
-  { name: 'Ruby-throated hummingbird', kind: 'ANIMAL · BIRD', icon: '🐦', speed: 30, range: 60, note: 'This is a typical fast flight pace; courtship dives are quicker.' },
-  { name: 'Mallard duck (flight)', kind: 'ANIMAL · BIRD', icon: '🦆', speed: 55, range: 100, note: 'Mallards can fly at this speed when moving quickly.' },
-  { name: 'Homing pigeon', kind: 'ANIMAL · BIRD', icon: '🕊️', speed: 90, range: 150, note: 'Racing pigeons can reach this speed in favorable conditions.' },
-  { name: 'Osprey (dive)', kind: 'ANIMAL · BIRD', icon: '🦅', speed: 80, range: 150, note: 'An osprey folds into a steep dive when targeting fish.' },
-  { name: 'Emu', kind: 'ANIMAL · BIRD', icon: '🐦', speed: 31, range: 60, note: 'The second-tallest living bird is a strong runner.' },
-  { name: 'Swordfish', kind: 'ANIMAL · OCEAN', icon: '🐟', speed: 60, range: 100, note: 'Fast-swimming estimates vary, but swordfish are built for bursts.' },
-  { name: 'Yellowfin tuna', kind: 'ANIMAL · OCEAN', icon: '🐟', speed: 47, range: 90, note: 'A streamlined body and powerful tail drive quick bursts.' },
-  { name: 'Great white shark', kind: 'ANIMAL · OCEAN', icon: '🦈', speed: 25, range: 60, note: 'A great white can accelerate rapidly during a short attack.' },
-  { name: 'Shortfin mako shark', kind: 'ANIMAL · OCEAN', icon: '🦈', speed: 46, range: 90, note: 'The shortfin mako is among the ocean’s fastest sharks.' },
-  { name: 'Orca', kind: 'ANIMAL · OCEAN', icon: '🐬', speed: 35, range: 70, note: 'Orcas are powerful swimmers that can make fast bursts.' },
-  { name: 'Bottlenose dolphin', kind: 'ANIMAL · OCEAN', icon: '🐬', speed: 22, range: 50, note: 'A dolphin can accelerate quickly while chasing prey.' },
-  { name: 'California sea lion', kind: 'ANIMAL · OCEAN', icon: '🦭', speed: 18, range: 40, note: 'Sea lions can swim quickly in short bursts.' },
-  { name: 'Gentoo penguin', kind: 'ANIMAL · OCEAN', icon: '🐧', speed: 22, range: 50, note: 'Gentoo penguins are among the fastest swimming birds.' },
-  // More objects and vehicles
-  { name: 'Porsche 911 Turbo S', kind: 'OBJECT · SPORTS CAR', icon: '🏎️', speed: 205, range: 300, note: 'A high-performance road car with a top speed just over 200 mph.' },
-  { name: 'Bugatti Chiron Super Sport 300+', kind: 'OBJECT · HYPERCAR', icon: '🏎️', speed: 304, range: 400, note: 'A specially prepared Chiron exceeded 300 mph on a test track.' },
-  { name: 'McLaren F1', kind: 'OBJECT · SUPERCAR', icon: '🏎️', speed: 240, range: 350, note: 'The F1 became famous for its record-setting top speed in the 1990s.' },
-  { name: 'Lamborghini Aventador SVJ', kind: 'OBJECT · SUPERCAR', icon: '🏎️', speed: 217, range: 300, note: 'A V12 supercar with a top speed above 200 mph.' },
-  { name: 'Ferrari SF90 Stradale', kind: 'OBJECT · SUPERCAR', icon: '🏎️', speed: 211, range: 300, note: 'Ferrari’s plug-in hybrid supercar is capable of more than 200 mph.' },
-  { name: 'Tesla Model S Plaid', kind: 'OBJECT · ELECTRIC CAR', icon: '🚘', speed: 200, range: 300, note: 'With the right configuration, this electric sedan reaches 200 mph.' },
-  { name: 'Dodge Challenger SRT Hellcat Redeye', kind: 'OBJECT · MUSCLE CAR', icon: '🚘', speed: 203, range: 300, note: 'A high-powered muscle car with a claimed top speed above 200 mph.' },
-  { name: 'Chevrolet Corvette ZR1', kind: 'OBJECT · SUPERCAR', icon: '🏎️', speed: 233, range: 350, note: 'The latest ZR1 is built for extreme speed on road and track.' },
-  { name: 'Ford GT', kind: 'OBJECT · SUPERCAR', icon: '🏎️', speed: 216, range: 300, note: 'This road-going Ford supercar can exceed 200 mph.' },
-  { name: 'Nissan GT-R Nismo', kind: 'OBJECT · SPORTS CAR', icon: '🚘', speed: 196, range: 300, note: 'A track-focused version of Nissan’s high-performance coupe.' },
-  { name: 'Porsche Taycan Turbo S', kind: 'OBJECT · ELECTRIC CAR', icon: '🚘', speed: 162, range: 250, note: 'A powerful electric sedan with a high top speed for its class.' },
-  { name: 'Rimac Nevera', kind: 'OBJECT · ELECTRIC HYPERCAR', icon: '🏎️', speed: 258, range: 350, note: 'This electric hypercar has recorded a top speed above 250 mph.' },
-  { name: 'Koenigsegg Agera RS', kind: 'OBJECT · HYPERCAR', icon: '🏎️', speed: 278, range: 400, note: 'The Agera RS set a public-road production-car speed record.' },
-  { name: 'Bugatti Veyron Super Sport', kind: 'OBJECT · HYPERCAR', icon: '🏎️', speed: 267, range: 400, note: 'A record-setting production version of the Veyron.' },
-  { name: 'Honda Civic Type R', kind: 'OBJECT · SPORTS CAR', icon: '🚘', speed: 169, range: 250, note: 'A front-wheel-drive performance hatchback with a high top speed.' },
-  { name: 'Toyota GR Supra', kind: 'OBJECT · SPORTS CAR', icon: '🚘', speed: 155, range: 250, note: 'The production model is electronically limited to around this speed.' },
-  { name: 'Jeep Wrangler', kind: 'OBJECT · OFF-ROAD SUV', icon: '🚙', speed: 112, range: 200, note: 'Designed for trails first, its road top speed is much lower than a sports car.' },
-  { name: 'ThrustSSC', kind: 'OBJECT · JET-POWERED CAR', icon: '🏎️', speed: 763, range: 1000, note: 'This jet-powered car holds the official outright land-speed record.' },
-  { name: 'Concorde', kind: 'OBJECT · AIRCRAFT', icon: '✈️', speed: 1354, range: 1800, note: 'The supersonic passenger jet cruised at more than twice the speed of sound.' },
-  { name: 'SR-71 Blackbird', kind: 'OBJECT · AIRCRAFT', icon: '✈️', speed: 2193, range: 3000, note: 'A NASA-recorded flight set a speed record above 2,190 mph.' },
-  { name: 'North American X-15', kind: 'OBJECT · ROCKET AIRCRAFT', icon: '🚀', speed: 4520, range: 6000, note: 'This rocket-powered research aircraft set an unofficial record of 4,520 mph.' },
-  { name: 'Cessna 172', kind: 'OBJECT · AIRCRAFT', icon: '🛩️', speed: 140, range: 250, note: 'A small single-engine plane with a typical maximum speed near 140 mph.' },
-  { name: 'Boeing 787 Dreamliner', kind: 'OBJECT · AIRCRAFT', icon: '✈️', speed: 594, range: 800, note: 'A long-haul airliner designed to cruise close to 600 mph.' },
-  { name: 'Airbus A380', kind: 'OBJECT · AIRCRAFT', icon: '✈️', speed: 587, range: 800, note: 'The world’s largest passenger airliner cruises at high subsonic speed.' },
-  { name: 'F-16 Fighting Falcon', kind: 'OBJECT · FIGHTER JET', icon: '✈️', speed: 1320, range: 1800, note: 'At altitude, this fighter is capable of reaching about Mach 2.' },
-  { name: 'Supermarine Spitfire', kind: 'OBJECT · AIRCRAFT', icon: '✈️', speed: 362, range: 600, note: 'The classic WWII fighter reached this speed in later versions.' },
-  { name: 'P-51 Mustang', kind: 'OBJECT · AIRCRAFT', icon: '✈️', speed: 437, range: 700, note: 'A fast WWII fighter known for its long-range escort missions.' },
-  { name: 'F/A-18 Super Hornet', kind: 'OBJECT · FIGHTER JET', icon: '✈️', speed: 1190, range: 1800, note: 'This carrier-based fighter can fly at supersonic speed.' },
-  { name: 'TGV V150 train', kind: 'OBJECT · RAIL', icon: '🚄', speed: 357, range: 500, note: 'A modified French TGV set the rail-speed record for conventional trains.' },
-  { name: 'Shanghai Maglev train', kind: 'OBJECT · RAIL', icon: '🚄', speed: 268, range: 400, note: 'The magnetic-levitation service reaches this speed in operation.' },
-  { name: 'L0 Series maglev train', kind: 'OBJECT · RAIL', icon: '🚄', speed: 375, range: 550, note: 'Japan’s superconducting maglev reached this speed during testing.' },
-  { name: 'Eurostar e320', kind: 'OBJECT · RAIL', icon: '🚄', speed: 200, range: 300, note: 'This high-speed passenger train can run at about 200 mph.' },
-  { name: 'Amtrak Acela', kind: 'OBJECT · RAIL', icon: '🚄', speed: 160, range: 250, note: 'The Acela reaches its highest speeds on select sections of track.' },
-  { name: 'ICE 3 train', kind: 'OBJECT · RAIL', icon: '🚄', speed: 205, range: 300, note: 'Germany’s ICE 3 operates at high speeds on upgraded lines.' },
-  { name: 'Kawasaki Ninja H2R', kind: 'OBJECT · MOTORCYCLE', icon: '🏍️', speed: 249, range: 350, note: 'A closed-course supercharged motorcycle capable of nearly 250 mph.' },
-  { name: 'Suzuki Hayabusa', kind: 'OBJECT · MOTORCYCLE', icon: '🏍️', speed: 186, range: 300, note: 'Modern models are electronically limited to about 186 mph.' },
-  { name: 'Ducati Panigale V4 R', kind: 'OBJECT · MOTORCYCLE', icon: '🏍️', speed: 199, range: 300, note: 'A racing-derived superbike that can approach 200 mph.' },
-  { name: 'LiveWire One', kind: 'OBJECT · ELECTRIC MOTORCYCLE', icon: '🏍️', speed: 110, range: 200, note: 'A production electric motorcycle with a top speed around 110 mph.' },
-  { name: 'Eta human-powered bicycle', kind: 'OBJECT · BICYCLE', icon: '🚴', speed: 90, range: 150, note: 'A streamlined recumbent cycle set a human-powered speed record.' },
-  { name: 'Spirit of Australia', kind: 'OBJECT · HYDROPLANE', icon: '🚤', speed: 318, range: 450, note: 'Ken Warby’s jet-powered hydroplane holds the water-speed record.' },
-  { name: 'Vestas Sailrocket 2', kind: 'OBJECT · SAILBOAT', icon: '⛵', speed: 75, range: 120, note: 'This wind-powered craft set the outright sailing speed record.' },
-  { name: 'America’s Cup foiling sailboat', kind: 'OBJECT · SAILBOAT', icon: '⛵', speed: 55, range: 100, note: 'Modern foiling race boats can fly above the water at high speed.' },
-  { name: 'Personal watercraft', kind: 'OBJECT · WATERCRAFT', icon: '🛥️', speed: 67, range: 120, note: 'Many high-performance models are electronically limited near this speed.' },
-  { name: 'Space Shuttle in orbit', kind: 'OBJECT · SPACECRAFT', icon: '🚀', speed: 17500, range: 25000, note: 'The shuttle traveled at orbital speed while circling Earth.' },
-  { name: 'Parker Solar Probe', kind: 'OBJECT · SPACECRAFT', icon: '🛰️', speed: 430000, range: 500000, note: 'Near the Sun, NASA’s probe became the fastest human-made object.' },
-  // Slower wildlife and everyday mobility
-  { name: 'Virginia opossum (run)', kind: 'ANIMAL · MARSUPIAL', icon: '🦝', speed: 4, range: 100, note: 'A running opossum moves a little over 4 mph.' },
-  { name: 'North American beaver (swim)', kind: 'ANIMAL · AQUATIC MAMMAL', icon: '🦫', speed: 6, range: 100, note: 'A beaver can swim up to about 6 mph.' },
-  { name: 'Housefly (cruise)', kind: 'ANIMAL · INSECT', icon: '🪰', speed: 5, range: 100, note: 'A housefly cruises at roughly 4–5 mph.' },
-  { name: 'Eastern gray squirrel', kind: 'ANIMAL · SMALL MAMMAL', icon: '🐿️', speed: 15, range: 100, note: 'An eastern gray squirrel can run up to about 15 mph.' },
-  { name: 'Raccoon', kind: 'ANIMAL · SMALL MAMMAL', icon: '🦝', speed: 15, range: 100, note: 'Raccoons can reach about 15 mph despite their unhurried reputation.' },
-  { name: 'Worker honey bee (flight)', kind: 'ANIMAL · INSECT', icon: '🐝', speed: 18, range: 100, note: 'A worker honey bee can reach a top flight speed around 18 mph.' },
-  { name: 'Mountain goat (short burst)', kind: 'ANIMAL · MOUNTAIN', icon: '🐐', speed: 15, range: 100, note: 'Mountain goats can reach short-burst speeds of about 10–15 mph on steep terrain.' },
-  { name: 'Flying squirrel (glide)', kind: 'ANIMAL · GLIDING MAMMAL', icon: '🐿️', speed: 25, range: 100, note: 'Flying squirrels glide at roughly 20–30 mph; this is glide speed, not powered flight.' },
-  { name: 'John Deere X350 lawn tractor', kind: 'OBJECT · LAWN EQUIPMENT', icon: '🚜', speed: 6, range: 100, note: 'The X350 has a manufacturer-rated forward speed of 5.5 mph.' },
-  { name: 'Permobil F5 Corpus power wheelchair', kind: 'OBJECT · POWER MOBILITY', icon: '♿', speed: 8, range: 100, note: 'This model’s top speed is 7.5 mph.' },
-  { name: 'Pride Victory LX Sport scooter', kind: 'OBJECT · MOBILITY SCOOTER', icon: '🛵', speed: 8, range: 100, note: 'This mobility scooter has a maximum speed of 8 mph.' },
-  { name: 'Class 1 e-bike (assisted)', kind: 'OBJECT · E-BIKE', icon: '🚲', speed: 20, range: 100, note: 'Pedal assistance cuts off at 20 mph for a class 1 e-bike.' },
-  { name: 'Class 3 e-bike (assisted)', kind: 'OBJECT · E-BIKE', icon: '🚲', speed: 28, range: 100, note: 'Pedal assistance cuts off at 28 mph for a class 3 e-bike.' },
-  { name: 'Conventional golf cart', kind: 'OBJECT · GOLF CART', icon: '⛳', speed: 20, range: 100, note: 'A conventional golf cart has a maximum speed of 20 mph or lower.' },
-  { name: 'Neighborhood electric vehicle', kind: 'OBJECT · LOW-SPEED VEHICLE', icon: '🚙', speed: 25, range: 100, note: 'U.S. low-speed vehicle rules cap this class at 25 mph.' },
-  { name: 'Segway Ninebot Max G2 scooter', kind: 'OBJECT · ELECTRIC SCOOTER', icon: '🛴', speed: 22, range: 100, note: 'This model reaches 22 mph with the higher-speed mode enabled in its app.' },
-  // Unusual speed records, with the speed rounded to the nearest mph for play.
-  { name: 'Fastest motorized toilet', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🚽', speed: 71, range: 500, note: 'A student-built toilet-on-a-go-kart had a working flush and a toilet-brush gear lever.', source: 'https://www.guinnessworldrecords.com/world-records/fastest-toilet' },
-  { name: 'Fastest motorized shopping trolley', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🛒', speed: 70, range: 500, note: 'Matt McKeown turned a supermarket trolley into an airfield speed machine.', source: 'https://www.guinnessworldrecords.com/world-records/99843-fastest-motorized-shopping-trolley' },
-  { name: 'Fastest lawnmower', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🚜', speed: 143, range: 500, note: 'The record-setting Mowabusa took two years to build and test.', source: 'https://www.guinnessworldrecords.com/world-records/fastest-lawnmower' },
-  { name: 'Fastest mobile bed', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🛏️', speed: 84, range: 500, note: 'This custom bed was built on a Ford Mustang GT base.', source: 'https://www.guinnessworldrecords.com/world-records/fastest-mobile-bed' },
-  { name: 'Fastest sofa', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🛋️', speed: 101, range: 500, note: 'A motorized sofa broke the record at an event promoting iced coffee.', source: 'https://www.guinnessworldrecords.com/world-records/fastest-sofa' },
-  { name: 'Fastest motorized wheelbarrow', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🛠️', speed: 55, range: 500, note: 'John Loghry’s motorized wheelbarrow set the record in Iowa in 2024.', source: 'https://www.guinnessworldrecords.com/world-records/374138-fastest-wheelbarrow' },
-  { name: 'Fastest motorized pram', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🍼', speed: 53, range: 500, note: 'This stroller has a motorcycle engine and a standing platform for its driver.', source: 'https://www.guinnessworldrecords.com/world-records/103913-fastest-pram' },
-  { name: 'Fastest garden shed', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🛖', speed: 123, range: 500, note: 'The 2025 record-holder built a wooden shed shell over a TVR chassis and V8 engine.', source: 'https://www.guinnessworldrecords.com/world-records/fastest-garden-shed' },
-  { name: 'Fastest office desk', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🖥️', speed: 87, range: 500, note: 'Edd China drove a roadworthy desk across London.', source: 'https://www.guinnessworldrecords.com/world-records/fastest-office' },
-  { name: 'Fastest mobile gaming rig', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🎮', speed: 57, range: 500, note: 'Three passengers played video games while this custom gaming setup was driven through London.', source: 'https://www.guinnessworldrecords.com/world-records/90483-fastest-mobile-gaming-rig' },
-  { name: 'Fastest electric ice cream van', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🍦', speed: 80, range: 500, note: 'Mr Nippy is an electric van that still serves soft-serve ice cream.', source: 'https://www.guinnessworldrecords.com/world-records/506641-fastest-electric-ice-cream-van' },
-  { name: 'Fastest bumper car', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🚘', speed: 100, range: 500, note: 'Colin Furze kept the bumper-car chassis and wheels, then fitted a motorcycle engine.', source: 'https://www.guinnessworldrecords.com/world-records/95779-fastest-bumper-car-dodgem' },
-  { name: 'Fastest barstool kart', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🪑', speed: 22, range: 500, note: 'This deliberately unstreamlined racing kart was built around a barstool.', source: 'https://www.guinnessworldrecords.com/world-records/660302-fastest-motorised-bar-stool' },
-  { name: 'Fastest motorized clog shoe', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '👞', speed: 70, range: 500, note: 'A giant Dutch clog shell was fitted around an electric go-kart.', source: 'https://www.guinnessworldrecords.com/world-records/763032-fastest-motorised-clog-shoe' },
-  { name: 'Fastest motorized bathtub', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🛁', speed: 116, range: 500, note: 'This racing bath included a shower head and scrub brush beside the driver.', source: 'https://www.guinnessworldrecords.com/world-records/381071-fastest-bathtub' },
-  { name: 'Fastest mobility scooter', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🛵', speed: 112, range: 500, note: 'A modified scooter based on a commercially available mobility aid set this record in Germany.', source: 'https://www.guinnessworldrecords.com/world-records/fastest-mobility-scooter' },
-  { name: 'Fastest motorized BMX bike', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🚲', speed: 55, range: 500, note: 'Kevin Nicks added a petrol engine to a BMX for a runway speed attempt.', source: 'https://www.guinnessworldrecords.com/world-records/712022-fastest-speed-achieved-on-a-motorised-bmx-bike' },
-  { name: 'Fastest electric skateboard', kind: 'WORLD RECORD · BOARD SPORT', icon: '🛹', speed: 82, range: 500, note: 'Raine Kent set this record on an electric skateboard in Western Australia.', source: 'https://www.guinnessworldrecords.com/world-records/401112-fastest-speed-on-an-electric-skateboard' },
-  { name: 'Fastest towed skateboard', kind: 'WORLD RECORD · BOARD SPORT', icon: '🛹', speed: 93, range: 500, note: 'A Tesla Roadster towed Steffen Eliassen during this speed-record attempt.', source: 'https://www.guinnessworldrecords.com/world-records/fastest-speed-for-a-towed-skateboard' },
-  { name: 'Fastest motorized chariot', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🏛️', speed: 61, range: 500, note: 'Jack Wallace Jr. and Mark Dawson built a motorized take on the ancient chariot.', source: 'https://www.guinnessworldrecords.com/world-records/fastest-motorised-chariot' },
-  { name: 'Fastest sandboard', kind: 'WORLD RECORD · BOARD SPORT', icon: '🏜️', speed: 51, range: 500, note: 'Erik Johnson set this record racing down the dunes at Sand Master Jam.', source: 'https://www.guinnessworldrecords.com/world-records/72023-fastest-speed-on-a-sandboard-men' },
-  { name: 'Fastest towed snowboard', kind: 'WORLD RECORD · BOARD SPORT', icon: '🏂', speed: 117, range: 500, note: 'Jamie Barrow rode a snowboard towed across a frozen lake.', source: 'https://www.guinnessworldrecords.com/world-records/fastest-speed-for-a-snowboard-towed-by-a-vehicle' },
-  { name: 'Fastest jet-powered go-kart', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '🏁', speed: 121, range: 500, note: 'Scott Littledike spent years rebuilding and tuning this jet-engine kart.', source: 'https://www.guinnessworldrecords.com/world-records/391173-fastest-speed-in-a-jet-propelled-go-kart' },
-  { name: 'Fastest coffee-powered vehicle', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '☕', speed: 66, range: 500, note: 'The Co-operative Bean Machine used waste coffee chaff pellets to make gas for its engine.', source: 'https://www.guinnessworldrecords.com/world-records/107342-fastest-coffee-powered-vehicle' },
-  { name: 'Fastest compressed-air powered car', kind: 'WORLD RECORD · NOVEL VEHICLE', icon: '💨', speed: 80, range: 500, note: 'Toyota’s three-wheeled KU:RIN used compressed air stored onboard to power its engine.', source: 'https://www.guinnessworldrecords.com/world-records/fastest-compressed-air-powered-car' },
-];
-
-// Use shared slider ceilings so the scale gives only a broad speed band, not a
-// near-direct hint at the answer. The displayed range also remains the damage scale.
-for (const question of deck) {
-  question.range = question.speed <= 100 ? 100
-    : question.speed <= 500 ? 500
-      : question.speed <= 2000 ? 2000
-        : question.speed <= 30000 ? 30000
-          : 500000;
-}
+const deck = dailyDeck;
 
 function roomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   return Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 function safeRoom(room) {
+  const answerVisible = room.phase === 'reveal' || room.phase === 'finished';
   return {
     code: room.code, hostId: room.hostId, inviteUrl: `${gameOrigin}/?room=${room.code}`, phase: room.phase, round: room.round,
-    startingHealth: room.startingHealth, roundLimit: room.roundLimit, unitSystem: room.unitSystem, deadline: room.deadline, current: room.current ? { name: room.current.name, kind: room.current.kind, icon: room.current.icon, range: room.current.range, note: room.current.note, speed: room.phase === 'reveal' || room.phase === 'finished' ? room.current.speed : undefined } : null,
+    startingHealth: room.startingHealth, roundLimit: room.roundLimit, unitSystem: room.unitSystem, deadline: room.deadline, current: room.current ? {
+      id: room.current.id, name: room.current.name, kind: room.current.kind, icon: room.current.icon,
+      range: room.current.range, sliderMin: 1, note: answerVisible ? room.current.note : undefined, source: answerVisible ? room.current.source : undefined,
+      secondarySource: answerVisible ? room.current.secondarySource : undefined, imagePath: room.current.imagePath,
+      imageSourceUrl: room.current.imageSourceUrl, imageCredit: room.current.imageCredit,
+      imageLicenseUrl: room.current.imageLicenseUrl,
+      speed: answerVisible ? room.current.speed : undefined,
+    } : null,
     players: [...room.players.values()].map(p => ({ id: p.id, name: p.name, health: p.health, connected: p.connected, submitted: p.guess != null, guess: room.phase === 'reveal' || room.phase === 'finished' ? p.guess : undefined, damage: p.damage, alive: p.health > 0 })),
     winner: room.winner ? { id: room.winner.id, name: room.winner.name } : null,
   };
@@ -201,6 +55,15 @@ function dailyQuestionFor(day) {
   const index = ((utcDayNumber(day) % dailyDeck.length) + dailyDeck.length) % dailyDeck.length;
   return dailyDeck[index];
 }
+function sliderPositionForSpeed(speed, question) {
+  const min = 1;
+  const max = Number(question.range);
+  const bounded = Math.max(min, Math.min(max, Number(speed)));
+  return Math.round(Math.log(bounded / min) / Math.log(max / min) * 1000);
+}
+function damageForGuess(guess, question) {
+  return Math.min(100, Math.round(Math.abs(sliderPositionForSpeed(guess, question) - sliderPositionForSpeed(question.speed, question)) / 10));
+}
 function participantHash(day, id) {
   return createHash('sha256').update(`${day}:${id}`).digest('hex');
 }
@@ -210,14 +73,15 @@ async function persistDailyScoreStore() {
   await writeFile(temporaryFile, JSON.stringify(dailyScoreStore), { encoding: 'utf8', mode: 0o600 });
   await rename(temporaryFile, scoreDataFile);
 }
-async function loadDailyScoreStore(day) {
-  if (dailyScoreStoreDay === day && dailyScoreStore) return dailyScoreStore;
+async function loadDailyScoreStore(day, questionId) {
+  if (dailyScoreStoreDay === day && dailyScoreStoreQuestionId === questionId && dailyScoreStore) return dailyScoreStore;
   let previous = null;
   try { previous = JSON.parse(await readFile(scoreDataFile, 'utf8')); } catch {}
-  dailyScoreStore = previous?.day === day && previous.participants && typeof previous.participants === 'object'
-    ? { day, participants: previous.participants }
-    : { day, participants: {} };
+  dailyScoreStore = previous?.day === day && previous?.questionId === questionId && previous.participants && typeof previous.participants === 'object'
+    ? { day, questionId, participants: previous.participants }
+    : { day, questionId, participants: {} };
   dailyScoreStoreDay = day;
+  dailyScoreStoreQuestionId = questionId;
   await persistDailyScoreStore();
   return dailyScoreStore;
 }
@@ -254,7 +118,7 @@ function resolveRound(room) {
   for (const p of room.players.values()) {
     if (p.health <= 0) continue;
     if (p.guess == null) p.damage = 100;
-    else if (p.guess != null) p.damage = Math.min(100, Math.round(100 * Math.abs(p.guess - room.current.speed) / room.current.range));
+    else if (p.guess != null) p.damage = damageForGuess(p.guess, room.current);
     if (p.damage != null) p.health = Math.max(0, p.health - p.damage);
   }
   const alive = [...room.players.values()].filter(p => p.health > 0);
@@ -303,7 +167,7 @@ const server = http.createServer(async (req, res) => {
       if (!/^[0-9a-f-]{36}$/i.test(participantId)) return send(res, 400, { error: 'Could not load your community score.' });
       try {
         const operation = dailyScoreWrites.then(async () => {
-          await loadDailyScoreStore(day);
+          await loadDailyScoreStore(day, dailyQuestionFor(day).id);
           return dailyScoreSummary(day, participantHash(day, participantId));
         });
         dailyScoreWrites = operation.catch(() => {});
@@ -325,13 +189,13 @@ const server = http.createServer(async (req, res) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day !== today) return send(res, 409, { error: 'Today’s challenge has changed. Reload the page to continue.' });
     if (!/^[0-9a-f-]{36}$/i.test(participantId)) return send(res, 400, { error: 'Could not save your score.' });
     const question = dailyQuestionFor(day);
-    if (!Number.isFinite(guess) || guess < 0 || guess > question.range) return send(res, 400, { error: 'Choose a speed within today’s range.' });
-    const accuracy = 100 - Math.min(100, Math.round(100 * Math.abs(guess - question.speed) / question.range));
+    if (!Number.isFinite(guess) || guess < 1 || guess > question.range) return send(res, 400, { error: 'Choose a speed within today’s range.' });
+    const accuracy = 100 - damageForGuess(guess, question);
     const hash = participantHash(day, participantId);
     const operation = dailyScoreWrites.then(async () => {
-      const store = await loadDailyScoreStore(day);
+      const store = await loadDailyScoreStore(day, question.id);
       if (Object.hasOwn(store.participants, hash)) return;
-      dailyScoreStore = { day, participants: { ...store.participants, [hash]: accuracy } };
+      dailyScoreStore = { day, questionId: question.id, participants: { ...store.participants, [hash]: accuracy } };
       try { await persistDailyScoreStore(); } catch (error) { dailyScoreStore = store; throw error; }
     });
     dailyScoreWrites = operation.catch(() => {});
@@ -398,9 +262,8 @@ const server = http.createServer(async (req, res) => {
     if (action === 'guess') {
       if (room.phase !== 'guessing' || player.health <= 0) return send(res, 409, { error: 'Guesses are closed.' });
       const guess = Number(data.guess);
-      const guessRange = room.unitSystem === 'metric' ? Math.round(room.current.range * 1.609344) : room.current.range;
-      if (!Number.isFinite(guess) || guess < 0 || guess > guessRange) return send(res, 400, { error: 'Choose a speed within the slider.' });
-      player.guess = Number((room.unitSystem === 'metric' ? guess / 1.609344 : guess).toFixed(3)); publish(room);
+      if (!Number.isFinite(guess) || guess < 1 || guess > room.current.range) return send(res, 400, { error: 'Choose a speed within the slider.' });
+      player.guess = Number(guess.toPrecision(12)); publish(room);
       const active = [...room.players.values()].filter(p => p.health > 0);
       if (active.every(p => p.guess != null)) resolveRound(room);
       return send(res, 200, { room: safeRoom(room) });
@@ -425,13 +288,24 @@ const server = http.createServer(async (req, res) => {
     }
     return send(res, 404, { error: 'Unknown action.' });
   }
-  const requested = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
-  const file = path.join(here, 'public', requested);
-  if (!file.startsWith(path.join(here, 'public'))) return send(res, 403, { error: 'Forbidden.' });
+  let requested;
+  try { requested = decodeURIComponent(url.pathname === '/' ? 'index.html' : url.pathname.slice(1)); }
+  catch { return send(res, 400, { error: 'Invalid file path.' }); }
+  const publicRoot = path.resolve(here, 'public');
+  const file = path.resolve(publicRoot, requested);
+  if (file !== publicRoot && !file.startsWith(`${publicRoot}${path.sep}`)) return send(res, 403, { error: 'Forbidden.' });
   try {
     const content = await import('node:fs/promises').then(fs => fs.readFile(file));
-    const type = file.endsWith('.html') ? 'text/html; charset=utf-8' : file.endsWith('.css') ? 'text/css; charset=utf-8' : file.endsWith('.json') ? 'application/json; charset=utf-8' : 'text/javascript; charset=utf-8';
-    res.writeHead(200, { 'content-type': type }); res.end(content);
+    const extension = path.extname(file).toLowerCase();
+    const types = {
+      '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+      '.json': 'application/json; charset=utf-8', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+      '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+    };
+    const headers = { 'content-type': types[extension] || 'application/octet-stream', 'x-content-type-options': 'nosniff' };
+    if (file.startsWith(`${publicRoot}${path.sep}images${path.sep}`)) headers['cache-control'] = 'public, max-age=31536000, immutable';
+    else headers['cache-control'] = 'no-cache';
+    res.writeHead(200, headers); res.end(content);
   } catch { send(res, 404, { error: 'Not found.' }); }
 });
 
@@ -439,7 +313,7 @@ setInterval(() => {
   for (const room of rooms.values()) resolveExpiredRound(room);
 }, 500);
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, HOST, () => {
   const addresses = Object.values(os.networkInterfaces()).flat().filter(x => x && x.family === 'IPv4' && !x.internal).map(x => `http://${x.address}:${PORT}`);
   console.log(`Speedle is ready at http://localhost:${PORT}${addresses.length ? `\nOn your Wi-Fi: ${addresses.join(', ')}` : ''}`);
 });
