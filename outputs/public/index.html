@@ -14,11 +14,24 @@
   <main id="app" class="app-shell">
     <header class="topbar">
       <a class="brand" href="/" aria-label="Speedle home"><img class="brand-animal" src="/images/cheetah-icon.png" alt="" aria-hidden="true"><span>SPEEDLE</span></a>
-      <div class="top-right"><span class="live-dot"></span><span>PLAY WITH FRIENDS</span></div>
+      <div class="topbar-actions">
+        <div class="top-right"><span class="live-dot"></span><span>PLAY WITH FRIENDS</span></div>
+        <button class="topbar-bookmark" id="bookmark-help-open" type="button" aria-haspopup="dialog" aria-controls="bookmark-help"><svg class="bookmark-icon" viewBox="0 0 16 18" aria-hidden="true"><path d="M4 2.5h8a1 1 0 0 1 1 1v12l-5-3.2-5 3.2v-12a1 1 0 0 1 1-1Z"/></svg><span>Add to your daily spread</span></button>
+      </div>
     </header>
     <section id="view" class="view"></section>
     <footer class="footer"><span>CREATED BY MICHAEL DOWNS</span><span>A HANDSHAKE × OPENAI PROJECT</span></footer>
   </main>
+  <dialog class="bookmark-help" id="bookmark-help" aria-labelledby="bookmark-help-title">
+    <div class="bookmark-help-card">
+      <button class="bookmark-help-close" type="button" data-bookmark-help-close aria-label="Close bookmark instructions">×</button>
+      <div class="eyebrow"><span class="bar"></span>KEEP SPEEDLE CLOSE</div>
+      <h2 id="bookmark-help-title">Add Speedle to your bookmarks</h2>
+      <p>Press <kbd>⌘ D</kbd> on Mac or <kbd>Ctrl D</kbd> on Windows or Linux, then save this page in your bookmarks.</p>
+      <p class="bookmark-help-mobile">On a phone, open your browser menu or share button and choose “Add Bookmark” or “Add to Favorites.”</p>
+      <button class="btn btn-primary bookmark-help-done" type="button" data-bookmark-help-close>Got it</button>
+    </div>
+  </dialog>
   <div id="toast" class="toast" role="status"></div>
   <script src="/app.js" defer></script>
 </body>

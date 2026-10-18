@@ -461,7 +461,7 @@
     "tierName": "Supersonic",
     "name": "Concorde",
     "kind": "MACHINES & VEHICLES",
-    "icon": "🥂",
+    "icon": "✈️",
     "speed": 1338.0,
     "speedKmh": 2154.0,
     "range": 25000,

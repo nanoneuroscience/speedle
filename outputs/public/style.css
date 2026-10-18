@@ -11,6 +11,21 @@ body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(
 .brand-animal { display: block; flex: 0 0 auto; width: 60px; height: 34px; object-fit: cover; object-position: center; overflow: hidden; transform: scaleX(-1); }
 .top-right, .eyebrow, .footer { font: 500 10px var(--mono); letter-spacing: .12em; }
 .top-right { display: flex; align-items: center; gap: 9px; color: var(--muted); }
+.topbar-actions { display: flex; align-items: center; gap: 17px; }
+.topbar-bookmark { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; padding: 0 11px; border: 1px solid var(--line); border-radius: 7px; background: var(--white); color: var(--ink); font: 600 10px var(--sans); text-decoration: none; white-space: nowrap; cursor: pointer; transition: border-color .16s, background .16s, transform .16s; }
+.topbar-bookmark:hover { border-color: var(--orange); transform: translateY(-1px); }
+.topbar-bookmark:focus-visible, .bookmark-help-close:focus-visible, .bookmark-help-done:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+.bookmark-icon { width: 13px; height: 15px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.bookmark-help { width: min(440px, calc(100vw - 32px)); max-width: none; padding: 0; border: 0; border-radius: 16px; background: transparent; color: var(--ink); overflow: visible; }
+.bookmark-help::backdrop { background: #14231fcc; backdrop-filter: blur(3px); }
+.bookmark-help-card { position: relative; padding: 30px; border: 1px solid var(--line); border-radius: 16px; background: var(--white); box-shadow: 0 18px 55px #101b1740; }
+.bookmark-help-close { position: absolute; top: 12px; right: 12px; display: grid; width: 32px; height: 32px; place-items: center; padding: 0; border: 0; border-radius: 50%; background: #f2f2ec; color: var(--muted); font: 500 20px/1 var(--sans); cursor: pointer; }
+.bookmark-help-close:hover { background: #e9ebe3; color: var(--ink); }
+.bookmark-help h2 { margin: 18px 35px 10px 0; font-size: 29px; line-height: 1.05; }
+.bookmark-help p { margin: 0 0 12px; color: #6c7b75; font-size: 14px; line-height: 1.6; }
+.bookmark-help kbd { display: inline-block; padding: 2px 6px; border: 1px solid #d7ddd5; border-radius: 5px; background: #f5f6f0; color: var(--ink); font: 600 12px var(--sans); }
+.bookmark-help .bookmark-help-mobile { padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; }
+.bookmark-help-done { width: 100%; margin-top: 7px; }
 .live-dot { width: 7px; height: 7px; background: #62ba59; border-radius: 50%; box-shadow: 0 0 0 3px #62ba5922; }
 .view { min-height: calc(100vh - 132px); }
 .footer { height: 54px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; color: #87918d; }
@@ -68,7 +83,7 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: -.055em; }
 .endless-scoreboard span { color: var(--muted); font: 500 9px var(--mono); letter-spacing: .08em; }
 .endless-stage { position: relative; }
 .endless-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 96px; }
-.endless-choice { position: relative; isolation: isolate; display: flex; min-width: 0; min-height: 230px; flex-direction: column; align-items: flex-start; justify-content: flex-end; overflow: hidden; padding: 17px 20px 18px; border: 1px solid #e1e5dc; border-radius: 10px; background: #263a34; color: white; text-align: left; cursor: pointer; transition: transform .16s, border-color .16s, background .16s, box-shadow .16s; }
+.endless-choice { position: relative; isolation: isolate; display: flex; min-width: 0; min-height: 280px; aspect-ratio: 5 / 4; flex-direction: column; align-items: flex-start; justify-content: flex-end; overflow: hidden; padding: 17px 20px 18px; border: 1px solid #e1e5dc; border-radius: 10px; background: #263a34; color: white; text-align: left; cursor: pointer; transition: transform .16s, border-color .16s, background .16s, box-shadow .16s; }
 .endless-choice.endless-hidden { visibility: hidden; opacity: 0; transform: translateX(18px) scale(.96); pointer-events: none; }
 .endless-choice.endless-visible { visibility: visible; opacity: 1; transform: none; }
 .endless-choice.endless-enter-left { visibility: visible; animation: endlessObjectLeft .48s cubic-bezier(.2,.78,.25,1) both; }
@@ -122,14 +137,15 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: -.055em; }
 .daily-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
 .daily-head h2 { font-size: clamp(27px, 3.5vw, 38px); margin: 0; }
 .daily-head .count-tag { padding: 8px 12px; font-size: 10px; white-space: nowrap; }
-.daily-question-strip { position: relative; isolation: isolate; display: flex; align-items: center; min-height: 190px; overflow: hidden; padding: 24px 22px 24px 26px; border-radius: 11px; background: #f3f3ed; }
+.daily-question-strip { position: relative; isolation: isolate; display: flex; align-items: center; min-height: 360px; overflow: hidden; padding: 24px 22px 24px 26px; border-radius: 11px; background: #f3f3ed; }
 .daily-question-copy { position: relative; z-index: 2; width: 61%; max-width: 560px; }
 .daily-question-strip .eyebrow { font-size: 9px; }
 .daily-question-strip h3 { margin: 7px 0 3px; font-size: clamp(24px, 3vw, 34px); }
 .daily-question-strip p { margin: 6px 0 0; color: #7d8983; font-size: 15px; line-height: 1.4; }
-.question-image-wrap.daily-question-image { position: absolute; z-index: 1; top: 0; right: 0; bottom: 0; display: block; width: 51%; overflow: hidden; margin: 0; border-radius: 0; background: #263a34; }
-.daily-question-image::after { position: absolute; z-index: 1; inset: 0; background: linear-gradient(90deg, #f3f3ed 0%, #f3f3edf2 7%, #f3f3ed8c 25%, #15251f12 56%, #15251f08 100%), linear-gradient(0deg, #15251f70 0%, transparent 38%); content: ""; pointer-events: none; }
-.daily-question-image .question-image { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: cover; object-position: center; border-radius: 0; }
+.question-image-wrap.daily-question-image { position: absolute; z-index: 1; top: 50%; right: 0; bottom: auto; display: block; width: min(44%, 480px); aspect-ratio: 4 / 3; overflow: visible; margin: 0; border-left: 2px solid #f3f3ed; border-radius: 0; background: #263a34; transform: translateY(-50%); }
+.daily-question-image::before { position: absolute; z-index: 2; top: 50%; left: 0; width: 8px; height: 48%; border-radius: 4px; background: var(--orange); content: ""; transform: translate(-50%, -50%); }
+.daily-question-image::after { content: none; }
+.daily-question-image .question-image { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: contain; object-position: center; border-radius: 0; }
 .daily-question-image .image-loading { position: absolute; z-index: 2; inset: 0; display: grid; place-items: center; padding: 10px; color: #fff; text-align: center; font: 8px/1.4 var(--mono); }
 .daily-question-image .image-credit { position: absolute; z-index: 2; right: 9px; bottom: 9px; max-width: 62%; overflow: hidden; padding: 0; background: transparent; color: #fff; text-shadow: 0 1px 4px #15251f; text-overflow: ellipsis; white-space: nowrap; font: 6px/1.2 var(--mono); }
 .daily-question-image .image-credit a { color: inherit; }
@@ -376,7 +392,7 @@ select.input { appearance: none; -webkit-appearance: none; padding-right: 38px; 
   .endless-head { align-items: flex-start; gap: 12px; } .endless-head h2 { font-size: 27px; } .endless-head p { max-width: 330px; font-size: 12px; }
   .endless-unit-control { min-width: 116px; } .endless-unit-switch { width: 116px; height: 36px; }
   .endless-scoreboard { grid-template-columns: 1fr 1fr; gap: 8px 10px; margin: 15px 0 11px; padding: 10px 12px; }
-  .endless-pair { gap: 70px; } .endless-choice { min-height: 195px; padding: 13px 13px 14px; }
+  .endless-pair { gap: 70px; } .endless-choice { min-height: 225px; aspect-ratio: auto; padding: 13px 13px 14px; }
   .endless-vs { width: 60px; height: 60px; border-width: 4px; font-size: 19px; }
   .endless-countdown > span:first-child { width: 88px; height: 88px; font-size: 44px; }
   .endless-countdown.is-go > span:first-child { width: 100px; height: 100px; font-size: 31px; }
@@ -384,10 +400,10 @@ select.input { appearance: none; -webkit-appearance: none; padding-right: 38px; 
   .endless-feedback { align-items: flex-start; padding: 10px 11px; } .endless-feedback .btn { padding: 10px 11px; font-size: 11px; }
   .daily-head { gap: 8px; margin-bottom: 15px; } .daily-head h2 { font-size: 27px; }
   .daily-head .count-tag { padding: 6px 8px; font-size: 8px; }
-  .daily-question-strip { min-height: 156px; padding: 17px 14px; }
+  .daily-question-strip { min-height: 210px; padding: 17px 14px; }
   .daily-question-copy { width: 64%; }
   .daily-question-strip h3 { font-size: 24px; } .daily-question-strip p { margin-top: 5px; font-size: 13px; }
-  .question-image-wrap.daily-question-image { width: 48%; }
+  .question-image-wrap.daily-question-image { top: 50%; right: 0; bottom: auto; width: min(55%, 250px); transform: translateY(-50%); }
   .daily-lanes-wrap { margin-top: 14px; }
   .daily-control-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); grid-template-areas: "guess guess" "unit submit"; align-items: end; gap: 10px; margin-top: 15px; }
   .daily-unit-row { grid-area: unit; justify-content: flex-start; } .daily-guess-control { grid-area: guess; padding: 12px 13px 9px; }
@@ -493,3 +509,15 @@ select.input { appearance: none; -webkit-appearance: none; padding-right: 38px; 
   .health-heart { width: 30px; height: 28px; }
   .health-caption { margin-top: 1px; }
 }
+
+@media (max-width: 680px) {
+  .topbar-actions { gap: 0; }
+  .top-right { display: none; }
+  .topbar-bookmark { min-height: 34px; padding: 0 9px; font-size: 9px; }
+}
+@media (max-width: 380px) {
+  .topbar-bookmark { gap: 6px; padding: 0 7px; font-size: 8px; }
+  .bookmark-icon { width: 12px; height: 14px; }
+}
+.bookmark-help-card { padding: 24px; }
+.bookmark-help h2 { font-size: 26px; }

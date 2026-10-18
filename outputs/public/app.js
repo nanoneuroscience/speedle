@@ -306,38 +306,40 @@ function shuffled(items) {
   }
   return result;
 }
+const ENDLESS_MAX_SPEED_RATIO = 3;
+function endlessSpeedsAreComparable(first, second) {
+  const firstSpeed = Number(first.speed);
+  const secondSpeed = Number(second.speed);
+  if (!Number.isFinite(firstSpeed) || !Number.isFinite(secondSpeed) || firstSpeed <= 0 || secondSpeed <= 0 || firstSpeed === secondSpeed) return false;
+  return Math.max(firstSpeed, secondSpeed) / Math.min(firstSpeed, secondSpeed) <= ENDLESS_MAX_SPEED_RATIO;
+}
+function findEndlessPair(items) {
+  const candidates = shuffled(items);
+  for (const first of candidates) {
+    const partners = shuffled(candidates.filter(item => item !== first && endlessSpeedsAreComparable(first, item)));
+    if (partners.length) return [first, partners[0]];
+  }
+  return null;
+}
 function drawEndlessPair() {
   let available = endlessDeck.filter(item => !endlessUsedNames.has(item.name));
   if (available.length < 2) {
     endlessUsedNames = new Set();
     available = endlessDeck;
   }
-  const ordered = shuffled(available);
-  const first = ordered[0];
-  let second = ordered.find(item => Number(item.speed) !== Number(first.speed));
-  if (!second) {
+  let pair = findEndlessPair(available);
+  if (!pair) {
     endlessUsedNames = new Set();
-    const fullDeck = shuffled(endlessDeck);
-    const fallbackFirst = fullDeck[0];
-    second = fullDeck.find(item => Number(item.speed) !== Number(fallbackFirst.speed));
-    if (!second) {
+    pair = findEndlessPair(endlessDeck);
+    if (!pair) {
       endlessDeckStatus = 'error';
-      endlessError = 'Could not find two objects with different speeds.';
+      endlessError = 'Could not find two objects with similar, different speeds.';
       endlessPair = null;
       return;
     }
-    endlessUsedNames.add(fallbackFirst.name);
-    endlessUsedNames.add(second.name);
-    endlessPair = shuffled([fallbackFirst, second]);
-    endlessSelectedObject = null;
-    endlessRoundStatus = 'guessing';
-    endlessIntroPhase = 'loading';
-    endlessReady = false;
-    return;
   }
-  endlessUsedNames.add(first.name);
-  endlessUsedNames.add(second.name);
-  endlessPair = shuffled([first, second]);
+  pair.forEach(item => endlessUsedNames.add(item.name));
+  endlessPair = shuffled(pair);
   endlessSelectedObject = null;
   endlessRoundStatus = 'guessing';
   endlessIntroPhase = 'loading';
@@ -553,6 +555,13 @@ function startRunnerLoop() {
   requestAnimationFrame(animateRunner);
 }
 function notify(message) { toast.textContent = message; toast.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 2600); }
+const bookmarkHelp = document.querySelector('#bookmark-help');
+document.querySelector('#bookmark-help-open')?.addEventListener('click', () => bookmarkHelp?.showModal());
+document.querySelectorAll('[data-bookmark-help-close]').forEach(button => button.addEventListener('click', () => bookmarkHelp?.close()));
+bookmarkHelp?.addEventListener('click', event => {
+  if (event.target === bookmarkHelp) bookmarkHelp.close();
+});
+localStorage.removeItem('speedle-daily-spread-bookmark');
 function decodeWikiText(value) {
   const element = document.createElement('textarea');
   element.innerHTML = String(value || '').replace(/<[^>]*>/g, ' ');
