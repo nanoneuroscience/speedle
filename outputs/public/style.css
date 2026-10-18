@@ -61,6 +61,10 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: -.055em; }
 .btn-full { width: 100%; margin-top: 3px; }
 .hint { margin: 15px 0 0; font-size: 11px; line-height: 1.5; color: #8a9590; }
 .daily-section { margin: 28px 0 52px; }
+.seo-copy { max-width: 760px; margin: 0 auto 68px; padding: 25px 6px 0; border-top: 1px solid var(--line); }
+.seo-copy .eyebrow { margin-bottom: 11px; }
+.seo-copy h2 { margin: 0 0 12px; color: var(--ink); font-size: clamp(24px, 3vw, 32px); }
+.seo-copy p { max-width: 720px; margin: 0 0 10px; color: #65736e; font-size: 14px; line-height: 1.7; }
 .daily-game-panel { padding: 28px 32px; box-shadow: 0 12px 34px #1a342109; }
 .solo-mode-tabs { display: flex; align-items: center; gap: 22px; margin: 0 0 22px; border-bottom: 1px solid var(--line); }
 .solo-mode-tab { position: relative; padding: 0 0 12px; border: 0; background: transparent; color: #8b9690; font: 600 13px var(--sans); cursor: pointer; }
