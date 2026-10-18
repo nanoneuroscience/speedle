@@ -552,7 +552,14 @@ function setSoloMode(mode) {
     button.classList.toggle('active', active);
     button.setAttribute('aria-selected', String(active));
   });
+  syncModeNav();
   if (soloMode === 'endless') void loadEndlessDeck();
+}
+function syncModeNav() {
+  document.querySelectorAll('[data-header-mode]').forEach(link => {
+    if (link.dataset.headerMode === soloMode) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  });
 }
 function animateRunner(timestamp) {
   if (!runnerLastFrame) runnerLastFrame = timestamp;
@@ -771,11 +778,15 @@ function leaveRoom() {
   render();
 }
 function createLanding() {
-  view.innerHTML = `<section class="landing">
-    <div class="hero-copy"><div class="eyebrow"><span class="bar"></span> A SPEED GUESSING SHOWDOWN</div><h1>Speedle.</h1>
+  view.innerHTML = `<section class="landing" aria-labelledby="hero-title">
+    <div class="hero-copy"><div class="eyebrow"><span class="bar"></span> A SPEED GUESSING SHOWDOWN</div><h1 id="hero-title">How fast is <em>fast?</em></h1>
       <p class="hero-sub">From hummingbirds to jet planes, do you really know how fast they go? Guess. Survive. Outrun the group and win.</p>
-      <div class="hero-pitches"><div class="hero-pitch"><span>WITH FRIENDS</span><strong>Challenge your friends</strong><p>Join a room and see who can outlast the group.</p></div><div class="hero-pitch"><span>ON YOUR OWN</span><strong>Train with Daily Speedle</strong><p>Play today’s solo guess or take on Endless Speedle.</p></div></div>
+      <div class="hero-actions"><a class="btn hero-secondary" href="#daily-speedle" data-hero-daily>Play Daily Speedle</a><a class="btn btn-primary" href="#room-entry">Play with friends <span aria-hidden="true">↗</span></a></div>
+      <div class="hero-meta"><span>2–8 PLAYERS</span><span>DAILY SOLO CHALLENGE</span><span>ENDLESS MODE</span></div>
     </div>
+  </section>
+  <section class="entry-section" id="room-entry" aria-labelledby="entry-title">
+    <div class="entry-intro"><div class="eyebrow"><span class="bar"></span> PLAY WITH FRIENDS</div><h2 id="entry-title">Bring the group together.</h2><p>Create a room and share the code, or join a friend who’s already playing.</p></div>
     <div class="entry-card"><div class="tabs"><button class="tab ${selectedTab === 'create' ? 'active' : ''}" data-tab="create">Create a room</button><button class="tab ${selectedTab === 'join' ? 'active' : ''}" data-tab="join">Join a room</button></div>
       <form id="entry-form"><div class="form-row"><label class="field-label" for="player-name">YOUR NAME</label><input id="player-name" class="input" placeholder="What should we call you?" maxlength="18" autocomplete="nickname" required /></div>
       <div class="form-row ${selectedTab === 'join' ? '' : 'hidden'}" id="join-field"><label class="field-label" for="room-code-input">ROOM CODE</label><input id="room-code-input" class="input join-code" placeholder="E.G. J7KM" maxlength="4" autocomplete="off" /></div>
@@ -783,7 +794,7 @@ function createLanding() {
       <p class="hint">${selectedTab === 'create' ? 'You’ll get a code to share. Friends can join from any phone on the same Wi-Fi.' : inviteRoomCode ? 'You were invited to a room. Add your name and jump in.' : 'Ask your host for their room code and join the lobby.'}</p>
     </div>
   </section><section class="rules"><div class="rule"><span class="rule-no">01</span><strong>Pick your speed</strong><span>Slide to your best guess of the object’s top speed.</span></div><div class="rule"><span class="rule-no">02</span><strong>Protect your health</strong><span>Miss by more, lose more. Damage is capped at 100 HP each round.</span></div><div class="rule"><span class="rule-no">03</span><strong>Stay in the race</strong><span>Hit zero and you’re out. Last one standing wins.</span></div></section>
-  <section class="daily-section"><div class="daily-game-panel panel"><div class="solo-mode-tabs" role="tablist" aria-label="Solo game modes"><button class="solo-mode-tab ${soloMode === 'daily' ? 'active' : ''}" type="button" role="tab" data-solo-mode="daily" aria-selected="${soloMode === 'daily'}">Daily Speedle</button><button class="solo-mode-tab ${soloMode === 'endless' ? 'active' : ''}" type="button" role="tab" data-solo-mode="endless" aria-selected="${soloMode === 'endless'}">Endless</button></div><div id="daily-challenge-content" class="${soloMode === 'daily' ? '' : 'hidden'}">${dailyPanel()}</div><div id="endless-challenge-content" class="${soloMode === 'endless' ? '' : 'hidden'}">${endlessPanel()}</div></div></section>
+  <section class="daily-section" id="daily-speedle"><div class="daily-game-panel panel"><div class="solo-mode-tabs" role="tablist" aria-label="Solo game modes"><button class="solo-mode-tab ${soloMode === 'daily' ? 'active' : ''}" type="button" role="tab" data-solo-mode="daily" aria-selected="${soloMode === 'daily'}">Daily Speedle</button><button class="solo-mode-tab ${soloMode === 'endless' ? 'active' : ''}" type="button" role="tab" data-solo-mode="endless" aria-selected="${soloMode === 'endless'}">Endless</button></div><div id="daily-challenge-content" class="${soloMode === 'daily' ? '' : 'hidden'}">${dailyPanel()}</div><div id="endless-challenge-content" class="${soloMode === 'endless' ? '' : 'hidden'}">${endlessPanel()}</div></div></section>
   <section class="seo-copy" aria-labelledby="about-speedle-title">
     <div class="eyebrow"><span class="bar"></span> THE SPEED GUESSING GAME</div>
     <h2 id="about-speedle-title">How well do you know top speeds?</h2>
@@ -792,6 +803,11 @@ function createLanding() {
   </section>`;
   const roomCodeInput = view.querySelector('#room-code-input');
   if (inviteRoomCode && roomCodeInput) roomCodeInput.value = inviteRoomCode;
+  view.querySelector('[data-hero-daily]')?.addEventListener('click', event => {
+    event.preventDefault();
+    setSoloMode('daily');
+    view.querySelector('#daily-speedle')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
   view.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => {
     selectedTab = button.dataset.tab;
     // Keep the invite code available if they switch back, but let the selected tab
@@ -974,4 +990,13 @@ document.querySelector('.brand')?.addEventListener('click', event => {
   event.preventDefault();
   leaveRoom();
 });
+document.querySelectorAll('[data-header-mode]').forEach(link => link.addEventListener('click', event => {
+  event.preventDefault();
+  const mode = link.dataset.headerMode === 'endless' ? 'endless' : 'daily';
+  if (state || playerId || roomCode || inviteRoomCode) leaveRoom();
+  setSoloMode(mode);
+  history.replaceState({}, '', '/#daily-speedle');
+  view.querySelector('#daily-speedle')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}));
+syncModeNav();
 if (playerId && roomCode) connect(roomCode); else createLanding();
