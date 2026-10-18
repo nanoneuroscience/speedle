@@ -7,8 +7,8 @@
 body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); min-height: 100vh; }
 .app-shell { max-width: 1240px; margin: auto; padding: 0 46px; }
 .topbar { height: 78px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
-.brand { display: flex; align-items: center; gap: 10px; padding: 5px 13px 5px 8px; border-radius: 4px; background: #f4b299; color: var(--ink); font: 700 12px var(--mono); letter-spacing: .12em; text-decoration: none; }
-.brand-animal { display: block; flex: 0 0 auto; width: 60px; height: 34px; object-fit: cover; object-position: center; overflow: hidden; transform: scaleX(-1); }
+.brand { display: inline-flex; flex: 0 0 auto; align-items: center; padding: 0; text-decoration: none; }
+.brand-logo { display: block; width: 216px; max-width: 42vw; height: auto; object-fit: contain; }
 .top-right, .eyebrow, .footer { font: 500 10px var(--mono); letter-spacing: .12em; }
 .top-right { display: flex; align-items: center; gap: 9px; color: var(--muted); }
 .topbar-actions { display: flex; align-items: center; gap: 17px; }
