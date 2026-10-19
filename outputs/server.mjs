@@ -2,6 +2,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
@@ -10,7 +11,8 @@ const PORT = Number(process.env.PORT || 4173);
 const HOST = process.env.HOST || '0.0.0.0';
 const rooms = new Map();
 const streams = new Map();
-const scoreDataDir = process.env.SPEEDLE_DATA_DIR || path.join(os.tmpdir(), 'speedle-data');
+const persistentDiskDir = '/var/data';
+const scoreDataDir = process.env.SPEEDLE_DATA_DIR || (existsSync(persistentDiskDir) ? persistentDiskDir : path.join(os.tmpdir(), 'speedle-data'));
 const scoreDataFile = path.join(scoreDataDir, 'daily-scores.json');
 let dailyScoreStore = null;
 let dailyScoreStoreDay = null;
@@ -83,6 +85,47 @@ function damageForGuess(guess, question) {
 function participantHash(day, id) {
   return createHash('sha256').update(`${day}:${id}`).digest('hex');
 }
+function profileHash(id) {
+  return createHash('sha256').update(`profile:${id}`).digest('hex');
+}
+const blockedNameFragments = [
+  'nigger', 'niggers', 'nigga', 'niggas', 'darkie', 'darkies', 'zipperhead', 'zipperheads',
+  'wetback', 'wetbacks', 'raghead', 'ragheads', 'towelhead', 'towelheads', 'faggot', 'faggots',
+  'tranny', 'trannies', 'shemale', 'shemales', 'retard', 'retards', 'retarded', 'mongoloid',
+  'jigaboo', 'jiggaboo', 'porchmonkey', 'porchmonkeys', 'polack', 'polacks',
+];
+const blockedNameWords = [
+  'coon', 'coons', 'chink', 'chinks', 'gook', 'gooks', 'spic', 'spics', 'spick', 'spicks',
+  'kike', 'kikes', 'heeb', 'heebs', 'fag', 'fags', 'dyke', 'dykes', 'paki', 'pakis',
+  'kraut', 'krauts', 'honky', 'honkies', 'jap',
+];
+function normalizedName(value) {
+  return String(value ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[0134578@!|$]/g, char => ({ '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b', '@': 'a', '!': 'i', '|': 'i', '$': 's' })[char]);
+}
+function containsBlockedName(value) {
+  const normalized = normalizedName(value);
+  const compact = normalized.replace(/[^a-z]/g, '');
+  const words = normalized.split(/[^a-z]+/).filter(Boolean);
+  return blockedNameFragments.some(term => compact.includes(term)) || blockedNameWords.some(term => words.includes(term));
+}
+function defaultProfile(id) {
+  return { displayName: `Speedster ${id.replaceAll('-', '').slice(0, 4).toUpperCase()}`, currentStreak: 0, bestStreak: 0, lastPlayedDay: null };
+}
+function cleanDisplayName(value) {
+  return Array.from(String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim()).slice(0, 18).join('');
+}
+function publicProfile(profile) {
+  return { displayName: containsBlockedName(profile.displayName) ? 'Speedster' : profile.displayName, currentStreak: profile.currentStreak, bestStreak: profile.bestStreak };
+}
+function updateProfileStreak(profile, day) {
+  if (profile.lastPlayedDay === day) return profile;
+  const previousDay = new Date(Date.parse(`${day}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
+  profile.currentStreak = profile.lastPlayedDay === previousDay ? profile.currentStreak + 1 : 1;
+  profile.bestStreak = Math.max(profile.bestStreak, profile.currentStreak);
+  profile.lastPlayedDay = day;
+  return profile;
+}
 async function persistDailyScoreStore() {
   await mkdir(scoreDataDir, { recursive: true });
   const temporaryFile = `${scoreDataFile}.${randomUUID()}.tmp`;
@@ -93,9 +136,9 @@ async function loadDailyScoreStore(day, questionId) {
   if (dailyScoreStoreDay === day && dailyScoreStoreQuestionId === questionId && dailyScoreStore) return dailyScoreStore;
   let previous = null;
   try { previous = JSON.parse(await readFile(scoreDataFile, 'utf8')); } catch {}
-  dailyScoreStore = previous?.day === day && previous?.questionId === questionId && previous.participants && typeof previous.participants === 'object'
-    ? { day, questionId, participants: previous.participants }
-    : { day, questionId, participants: {} };
+  const sameDayStore = previous?.day === day && previous?.questionId === questionId && previous.participants && typeof previous.participants === 'object';
+  const profiles = previous?.profiles && typeof previous.profiles === 'object' ? previous.profiles : {};
+  dailyScoreStore = { version: 2, day, questionId, participants: sameDayStore ? previous.participants : {}, profiles };
   dailyScoreStoreDay = day;
   dailyScoreStoreQuestionId = questionId;
   await persistDailyScoreStore();
@@ -174,6 +217,68 @@ const server = http.createServer(async (req, res) => {
     req.on('close', () => streams.get(code)?.delete(res));
     return;
   }
+  if (url.pathname === '/api/daily-leaderboard') {
+    if (req.method !== 'GET') return send(res, 405, { error: 'Use GET.' });
+    const day = url.searchParams.get('day') || '';
+    const participantId = url.searchParams.get('participant') || '';
+    const today = new Date().toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day !== today) return send(res, 409, { error: 'Today’s challenge has changed. Reload the page to continue.' });
+    if (!/^[0-9a-f-]{36}$/i.test(participantId)) return send(res, 400, { error: 'Could not load your player profile.' });
+    try {
+      const operation = dailyScoreWrites.then(async () => {
+        const store = await loadDailyScoreStore(day, dailyQuestionFor(day).id);
+        const key = profileHash(participantId);
+        const profile = store.profiles[key] || defaultProfile(participantId);
+        if (!store.profiles[key]) {
+          dailyScoreStore = { ...store, profiles: { ...store.profiles, [key]: profile } };
+          try { await persistDailyScoreStore(); } catch (error) { dailyScoreStore = store; throw error; }
+        }
+        const ranked = Object.entries(dailyScoreStore.participants)
+          .filter(([hash, accuracy]) => dailyScoreStore.profiles[hash] && Number.isInteger(accuracy) && accuracy >= 0 && accuracy <= 100)
+          .map(([hash, accuracy]) => ({ hash, accuracy, profile: dailyScoreStore.profiles[hash] }))
+          .sort((a, b) => b.accuracy - a.accuracy || b.profile.currentStreak - a.profile.currentStreak || a.profile.displayName.localeCompare(b.profile.displayName));
+        const myRank = ranked.findIndex(row => row.hash === key) + 1 || null;
+        const myAccuracy = dailyScoreStore.participants[key] ?? null;
+        return {
+          day,
+          profile: publicProfile(dailyScoreStore.profiles[key]),
+          entries: ranked.slice(0, 10).map((row, index) => ({ rank: index + 1, displayName: publicProfile(row.profile).displayName, accuracy: row.accuracy, currentStreak: row.profile.currentStreak })),
+          myRank,
+          myAccuracy,
+        };
+      });
+      dailyScoreWrites = operation.catch(() => {});
+      return send(res, 200, await operation);
+    } catch (error) {
+      console.error('Could not read the daily leaderboard:', error.message);
+      return send(res, 503, { error: 'The daily leaderboard is temporarily unavailable.' });
+    }
+  }
+  if (url.pathname === '/api/daily-profile') {
+    if (req.method !== 'POST') return send(res, 405, { error: 'Use POST.' });
+    let data;
+    try { data = await readJsonBody(req); } catch (error) { return send(res, 400, { error: error.message }); }
+    const participantId = String(data.participantId || '');
+    const displayName = cleanDisplayName(data.displayName);
+    if (!/^[0-9a-f-]{36}$/i.test(participantId)) return send(res, 400, { error: 'Could not save your player profile.' });
+    if (!displayName) return send(res, 400, { error: 'Enter a display name.' });
+    if (containsBlockedName(displayName)) return send(res, 400, { error: 'That name isn’t allowed. Please choose another.' });
+    const day = new Date().toISOString().slice(0, 10);
+    const operation = dailyScoreWrites.then(async () => {
+      const store = await loadDailyScoreStore(day, dailyQuestionFor(day).id);
+      const key = profileHash(participantId);
+      const profile = { ...(store.profiles[key] || defaultProfile(participantId)), displayName };
+      dailyScoreStore = { ...store, profiles: { ...store.profiles, [key]: profile } };
+      try { await persistDailyScoreStore(); } catch (error) { dailyScoreStore = store; throw error; }
+      return publicProfile(profile);
+    });
+    dailyScoreWrites = operation.catch(() => {});
+    try { return send(res, 200, { profile: await operation }); }
+    catch (error) {
+      console.error('Could not save the daily profile:', error.message);
+      return send(res, 503, { error: 'Your profile could not be saved right now.' });
+    }
+  }
   if (url.pathname === '/api/daily-scores') {
     if (req.method === 'GET') {
       const day = url.searchParams.get('day') || '';
@@ -184,7 +289,7 @@ const server = http.createServer(async (req, res) => {
       try {
         const operation = dailyScoreWrites.then(async () => {
           await loadDailyScoreStore(day, dailyQuestionFor(day).id);
-          return dailyScoreSummary(day, participantHash(day, participantId));
+          return dailyScoreSummary(day, profileHash(participantId)) || dailyScoreSummary(day, participantHash(day, participantId));
         });
         dailyScoreWrites = operation.catch(() => {});
         const summary = await operation;
@@ -207,11 +312,18 @@ const server = http.createServer(async (req, res) => {
     const question = dailyQuestionFor(day);
     if (!Number.isFinite(guess) || guess < 1 || guess > question.range) return send(res, 400, { error: 'Choose a speed within today’s range.' });
     const accuracy = 100 - damageForGuess(guess, question);
-    const hash = participantHash(day, participantId);
+    const hash = profileHash(participantId);
+    const legacyHash = participantHash(day, participantId);
     const operation = dailyScoreWrites.then(async () => {
       const store = await loadDailyScoreStore(day, question.id);
-      if (Object.hasOwn(store.participants, hash)) return;
-      dailyScoreStore = { day, questionId: question.id, participants: { ...store.participants, [hash]: accuracy } };
+      const participants = { ...store.participants };
+      if (!Object.hasOwn(participants, hash)) participants[hash] = Object.hasOwn(participants, legacyHash) ? participants[legacyHash] : accuracy;
+      delete participants[legacyHash];
+      const key = hash;
+      const profile = { ...(store.profiles[key] || defaultProfile(participantId)) };
+      updateProfileStreak(profile, day);
+      if (Object.hasOwn(store.participants, hash) && store.profiles[key]?.lastPlayedDay === day && !Object.hasOwn(store.participants, legacyHash)) return;
+      dailyScoreStore = { ...store, participants, profiles: { ...store.profiles, [key]: profile } };
       try { await persistDailyScoreStore(); } catch (error) { dailyScoreStore = store; throw error; }
     });
     dailyScoreWrites = operation.catch(() => {});
@@ -231,8 +343,9 @@ const server = http.createServer(async (req, res) => {
     try { data = JSON.parse(body || '{}'); } catch { return send(res, 400, { error: 'Invalid request.' }); }
     const action = url.pathname.slice(5);
     if (action === 'create') {
-      const name = String(data.name || '').trim().slice(0, 18);
+      const name = cleanDisplayName(data.name);
       if (!name) return send(res, 400, { error: 'Enter a name to create a room.' });
+      if (containsBlockedName(name)) return send(res, 400, { error: 'That name isn’t allowed. Please choose another.' });
       let code; do { code = roomCode(); } while (rooms.has(code));
       const id = randomUUID();
       const room = { code, hostId: id, players: new Map([[id, { id, name, health: 200, connected: true, guess: null, damage: null }]]), phase: 'lobby', round: 0, startingHealth: 200, roundLimit: 30, unitSystem: 'imperial', deadline: null, current: null, usedQuestionNames: new Set(), winner: null };
@@ -243,8 +356,9 @@ const server = http.createServer(async (req, res) => {
     if (!room) return send(res, 404, { error: 'That room code was not found.' });
     resolveExpiredRound(room);
     if (action === 'join') {
-      const name = String(data.name || '').trim().slice(0, 18);
+      const name = cleanDisplayName(data.name);
       if (!name) return send(res, 400, { error: 'Enter a name to join.' });
+      if (containsBlockedName(name)) return send(res, 400, { error: 'That name isn’t allowed. Please choose another.' });
       if (room.phase !== 'lobby') return send(res, 409, { error: 'This game has already started.' });
       if (room.players.size >= 8) return send(res, 409, { error: 'This room is full (8 players max).' });
       if ([...room.players.values()].some(p => p.name.toLowerCase() === name.toLowerCase())) return send(res, 409, { error: 'That name is already in this room.' });

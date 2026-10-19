@@ -47,6 +47,7 @@
       <div class="topbar-actions">
         <div class="top-right"><span class="live-dot"></span><span>PLAY WITH FRIENDS</span></div>
         <button class="topbar-bookmark" id="bookmark-help-open" type="button" aria-label="Show bookmark instructions" aria-haspopup="dialog" aria-controls="bookmark-help"><svg class="bookmark-icon" viewBox="0 0 16 18" aria-hidden="true"><path d="M4 2.5h8a1 1 0 0 1 1 1v12l-5-3.2-5 3.2v-12a1 1 0 0 1 1-1Z"/></svg><span>Add to your daily spread</span></button>
+        <button class="topbar-leaderboard" id="daily-leaderboard-open" type="button" aria-label="Open daily profile and leaderboard" aria-haspopup="dialog" aria-controls="daily-leaderboard-dialog"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3h8v4.2a4 4 0 0 1-8 0V3ZM6 5H3.5v1.2A3.3 3.3 0 0 0 7 9.5M14 5h2.5v1.2A3.3 3.3 0 0 1 13 9.5M10 11v3m-3 3h6m-5-3h4v3H8v-3Z"/></svg><span>Leaderboard</span></button>
       </div>
     </header>
     <section id="view" class="view"></section>
@@ -60,6 +61,14 @@
       <p>Press <kbd>⌘ D</kbd> on Mac or <kbd>Ctrl D</kbd> on Windows or Linux, then save this page in your bookmarks.</p>
       <p class="bookmark-help-mobile">On a phone, open your browser menu or share button and choose “Add Bookmark” or “Add to Favorites.”</p>
       <button class="btn btn-primary bookmark-help-done" type="button" data-bookmark-help-close>Got it</button>
+    </div>
+  </dialog>
+  <dialog class="daily-leaderboard-dialog" id="daily-leaderboard-dialog" aria-labelledby="daily-leaderboard-title">
+    <div class="daily-leaderboard-dialog-card">
+      <button class="daily-leaderboard-dialog-close" type="button" aria-label="Close leaderboard">×</button>
+      <div class="eyebrow"><span class="bar"></span> DAILY SPEEDLE</div>
+      <h2 id="daily-leaderboard-title">Your profile & leaderboard</h2>
+      <div id="daily-leaderboard-content"><div class="daily-loading"><span class="spinner"></span> Loading your player profile…</div></div>
     </div>
   </dialog>
   <div id="toast" class="toast" role="status"></div>

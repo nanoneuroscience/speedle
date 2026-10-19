@@ -34,6 +34,13 @@ let dailyCommunityStats = null;
 let dailyCommunityStatus = 'idle';
 let dailyCommunityError = '';
 let dailyCommunityRequestId = 0;
+let dailyLeaderboard = null;
+let dailyLeaderboardStatus = 'idle';
+let dailyLeaderboardError = '';
+let dailyLeaderboardRequestId = 0;
+let dailyProfileDraft = '';
+let dailyProfileError = '';
+let dailyProfileNotice = '';
 let soloMode = localStorage.getItem('speedle-solo-mode') === 'endless' ? 'endless' : 'daily';
 let endlessDeckStatus = 'idle';
 let endlessDeck = [];
@@ -113,9 +120,12 @@ function objectBlurb(note) {
 }
 function dailyResultKey(day) { return `speedle-daily-result-${day}`; }
 function dailyParticipantId(day) {
-  const key = `speedle-daily-participant-${day}`;
+  const key = 'speedle-player-profile-id';
   let id = localStorage.getItem(key);
-  if (!id) { id = crypto.randomUUID(); localStorage.setItem(key, id); }
+  if (!id) {
+    id = localStorage.getItem(`speedle-daily-participant-${day}`) || crypto.randomUUID();
+    localStorage.setItem(key, id);
+  }
   return id;
 }
 function scheduleDailyRefresh(serverTime) {
@@ -123,8 +133,11 @@ function scheduleDailyRefresh(serverTime) {
   const nextUtcMidnight = Date.UTC(serverTime.getUTCFullYear(), serverTime.getUTCMonth(), serverTime.getUTCDate() + 1);
   dailyMidnightTimer = setTimeout(() => {
     dailyCommunityRequestId += 1;
+    dailyLeaderboardRequestId += 1;
     dailyDeckStatus = 'idle'; dailyChallenge = null; dailyGuess = null; dailyResult = null;
     dailyCommunityStats = null; dailyCommunityStatus = 'idle'; dailyCommunityError = '';
+    dailyLeaderboard = null; dailyLeaderboardStatus = 'idle'; dailyLeaderboardError = ''; dailyProfileDraft = '';
+    dailyProfileError = ''; dailyProfileNotice = '';
     guessRunnerRate = 0; actualRunnerRate = 0; guessRunnerProgress = 0; actualRunnerProgress = 0;
     if (!state) { renderDailyCard(); loadDailyChallenge(); }
   }, Math.max(1000, nextUtcMidnight - serverTime.getTime() + 1200));
@@ -173,6 +186,7 @@ async function loadDailyChallenge() {
     dailyError = error.message;
   }
   if (!state) renderDailyCard();
+  void refreshDailyLeaderboard();
   if (!state && dailyResult) void refreshDailyCommunity(true);
 }
 async function refreshDailyCommunity(saveScore = false) {
@@ -180,6 +194,7 @@ async function refreshDailyCommunity(saveScore = false) {
   const requestId = ++dailyCommunityRequestId;
   const { day } = dailyChallenge;
   const participantId = dailyParticipantId(day);
+  let scoreSaved = false;
   dailyCommunityStatus = 'loading';
   dailyCommunityError = '';
   if (!state) renderDailyCard();
@@ -191,6 +206,7 @@ async function refreshDailyCommunity(saveScore = false) {
       });
       const submissionData = await submission.json();
       if (!submission.ok) throw new Error(submissionData.error || 'Could not submit today’s score.');
+      scoreSaved = true;
     }
     const query = new URLSearchParams({ day, participant: participantId });
     const response = await fetch(`/api/daily-scores?${query}`, { cache: 'no-store' });
@@ -205,6 +221,100 @@ async function refreshDailyCommunity(saveScore = false) {
     dailyCommunityStatus = 'error';
   }
   if (!state) renderDailyCard();
+  if (scoreSaved) void refreshDailyLeaderboard();
+}
+async function refreshDailyLeaderboard() {
+  if (!dailyChallenge) return;
+  const requestId = ++dailyLeaderboardRequestId;
+  const { day } = dailyChallenge;
+  const participantId = dailyParticipantId(day);
+  dailyLeaderboardStatus = 'loading';
+  dailyLeaderboardError = '';
+  updateDailyLeaderboardPanel();
+  try {
+    const query = new URLSearchParams({ day, participant: participantId });
+    const response = await fetch(`/api/daily-leaderboard?${query}`, { cache: 'no-store' });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not load the daily leaderboard.');
+    if (requestId !== dailyLeaderboardRequestId) return;
+    dailyLeaderboard = data;
+    dailyProfileDraft = data.profile?.displayName || '';
+    dailyProfileError = '';
+    dailyLeaderboardStatus = 'ready';
+  } catch (error) {
+    if (requestId !== dailyLeaderboardRequestId) return;
+    dailyLeaderboardError = error.message;
+    dailyLeaderboardStatus = 'error';
+  }
+  updateDailyLeaderboardPanel();
+}
+function dailyLeaderboardPanel() {
+  const header = `<div class="daily-community-head"><div><div class="eyebrow">DAILY LEADERBOARD</div><h3>Today’s players</h3></div><button class="community-refresh" id="daily-leaderboard-refresh" type="button" aria-label="Refresh daily leaderboard" title="Refresh leaderboard" ${dailyLeaderboardStatus === 'loading' ? 'disabled' : ''}>↻</button></div>`;
+  if (dailyLeaderboardStatus === 'loading' || dailyLeaderboardStatus === 'idle') return `<section class="daily-leaderboard" aria-live="polite">${header}<div class="community-message"><span class="spinner"></span> Loading your player profile…</div></section>`;
+  if (dailyLeaderboardStatus === 'error') return `<section class="daily-leaderboard" aria-live="polite">${header}<div class="community-message"><span>${escapeHtml(dailyLeaderboardError || 'Could not load the daily leaderboard.')}</span><button class="btn community-retry" id="daily-leaderboard-retry" type="button">Try again</button></div></section>`;
+  const profile = dailyLeaderboard?.profile;
+  const rank = dailyLeaderboard?.myRank ? `#${dailyLeaderboard.myRank}` : '—';
+  const entries = dailyLeaderboard?.entries || [];
+  const rows = entries.length
+    ? entries.map(row => `<li class="daily-leaderboard-row ${row.rank === dailyLeaderboard?.myRank ? 'is-you' : ''}"><span class="daily-leaderboard-rank">${row.rank}</span><span class="daily-leaderboard-name">${escapeHtml(row.displayName)}</span><span class="daily-leaderboard-streak" aria-label="${row.currentStreak} day streak" title="${row.currentStreak} day streak">${row.currentStreak} ${row.currentStreak === 1 ? 'day' : 'days'}</span><strong>${row.accuracy}%</strong></li>`).join('')
+    : `<li class="daily-leaderboard-empty">Be the first to submit today’s guess.</li>`;
+  const yourRow = dailyLeaderboard?.myRank > 10
+    ? `<li class="daily-leaderboard-row is-you daily-leaderboard-your-row"><span class="daily-leaderboard-rank">${dailyLeaderboard.myRank}</span><span class="daily-leaderboard-name">${escapeHtml(profile?.displayName || 'You')}</span><span class="daily-leaderboard-streak" aria-label="${profile?.currentStreak || 0} day streak" title="${profile?.currentStreak || 0} day streak">${profile?.currentStreak || 0} ${(profile?.currentStreak || 0) === 1 ? 'day' : 'days'}</span><strong>${dailyLeaderboard.myAccuracy}%</strong></li>`
+    : '';
+  const profileMessage = dailyProfileError
+    ? `<small class="daily-profile-error" role="alert">${escapeHtml(dailyProfileError)}</small>`
+    : dailyProfileNotice
+      ? `<small class="daily-profile-notice" role="status">${escapeHtml(dailyProfileNotice)}</small>`
+      : '<small>Submit a daily guess to extend your streak. Your profile is saved in this browser.</small>';
+  return `<section class="daily-leaderboard" aria-live="polite">${header}<div class="daily-streak-stats"><div><strong>${profile?.currentStreak || 0}</strong><span>DAY STREAK</span></div><div><strong>${profile?.bestStreak || 0}</strong><span>BEST STREAK</span></div><div><strong>${rank}</strong><span>TODAY’S RANK</span></div></div><form class="daily-profile-form" id="daily-profile-form"><label for="daily-profile-name">YOUR LEADERBOARD NAME</label><div><input id="daily-profile-name" name="displayName" maxlength="18" value="${escapeHtml(dailyProfileDraft || profile?.displayName || '')}" autocomplete="nickname" aria-label="Your leaderboard name" required><button class="btn" type="submit">Save name</button></div>${profileMessage}</form><ol class="daily-leaderboard-list">${rows}${yourRow}</ol></section>`;
+}
+function updateDailyLeaderboardPanel() {
+  const slot = document.querySelector('#daily-leaderboard-content');
+  if (!slot) return;
+  slot.innerHTML = dailyLeaderboardPanel();
+  slot.querySelector('#daily-leaderboard-refresh')?.addEventListener('click', () => void refreshDailyLeaderboard());
+  slot.querySelector('#daily-leaderboard-retry')?.addEventListener('click', () => void refreshDailyLeaderboard());
+  const nameInput = slot.querySelector('#daily-profile-name');
+  nameInput?.addEventListener('input', event => { dailyProfileDraft = event.currentTarget.value; });
+  slot.querySelector('#daily-profile-form')?.addEventListener('submit', event => {
+    event.preventDefault();
+    const displayName = String(new FormData(event.currentTarget).get('displayName') || '').trim();
+    void saveDailyDisplayName(displayName);
+  });
+}
+async function saveDailyDisplayName(displayName) {
+  if (!dailyChallenge) return;
+  const name = Array.from(displayName).slice(0, 18).join('');
+  if (!name) { notify('Enter a display name.'); return; }
+  dailyProfileDraft = name;
+  dailyProfileError = '';
+  dailyProfileNotice = '';
+  const participantId = dailyParticipantId(dailyChallenge.day);
+  const button = document.querySelector('#daily-leaderboard-content #daily-profile-form button[type="submit"]');
+  if (button) { button.disabled = true; button.textContent = 'Saving…'; }
+  try {
+    const response = await fetch('/api/daily-profile', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ participantId, displayName: name }),
+    });
+    const data = await response.json();
+    if (!response.ok && response.status === 400) {
+      dailyProfileError = data.error || 'That name isn’t allowed. Please choose another.';
+      updateDailyLeaderboardPanel();
+      return;
+    }
+    if (!response.ok) throw new Error(data.error || 'Could not save your name.');
+    if (dailyLeaderboard) dailyLeaderboard.profile = data.profile;
+    dailyLeaderboardError = '';
+    dailyLeaderboardStatus = 'ready';
+    dailyProfileNotice = 'Name saved.';
+    updateDailyLeaderboardPanel();
+    await refreshDailyLeaderboard();
+  } catch (error) {
+    dailyLeaderboardError = error.message;
+    dailyLeaderboardStatus = 'error';
+    updateDailyLeaderboardPanel();
+  }
 }
 function dailyCommunityPanel() {
   const header = `<div class="daily-community-head"><div><div class="eyebrow">TODAY’S COMMUNITY</div><h3>How others scored</h3></div><button class="community-refresh" id="daily-community-refresh" type="button" aria-label="Refresh community scores" title="Refresh scores" ${dailyCommunityStatus === 'loading' ? 'disabled' : ''}>↻</button></div>`;
@@ -258,6 +368,7 @@ function renderDailyCard() {
     if (revealedQuestionImages.get(dailyChallenge.question.name)) renderQuestionImage(dailyChallenge.question.name, 'daily-question-image');
   }
   bindDailyCard();
+  updateDailyLeaderboardPanel();
 }
 function bindDailyCard() {
   view.querySelector('#daily-retry')?.addEventListener('click', () => {
@@ -584,6 +695,16 @@ document.querySelector('#bookmark-help-open')?.addEventListener('click', () => b
 document.querySelectorAll('[data-bookmark-help-close]').forEach(button => button.addEventListener('click', () => bookmarkHelp?.close()));
 bookmarkHelp?.addEventListener('click', event => {
   if (event.target === bookmarkHelp) bookmarkHelp.close();
+});
+const dailyLeaderboardDialog = document.querySelector('#daily-leaderboard-dialog');
+document.querySelector('#daily-leaderboard-open')?.addEventListener('click', () => {
+  if (!dailyLeaderboardDialog?.open) dailyLeaderboardDialog?.showModal();
+  if (dailyChallenge) void refreshDailyLeaderboard();
+  else void loadDailyChallenge();
+});
+dailyLeaderboardDialog?.querySelector('.daily-leaderboard-dialog-close')?.addEventListener('click', () => dailyLeaderboardDialog.close());
+dailyLeaderboardDialog?.addEventListener('click', event => {
+  if (event.target === dailyLeaderboardDialog) dailyLeaderboardDialog.close();
 });
 localStorage.removeItem('speedle-daily-spread-bookmark');
 function decodeWikiText(value) {
