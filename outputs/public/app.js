@@ -54,6 +54,11 @@ let endlessReady = true;
 let endlessIntroTimer = null;
 let endlessScore = 0;
 let endlessBest = Number(localStorage.getItem('speedle-endless-best')) || 0;
+let endlessLeaderboard = null;
+let endlessLeaderboardStatus = 'idle';
+let endlessLeaderboardError = '';
+let endlessLeaderboardRequestId = 0;
+let endlessScoreSyncing = false;
 let endlessUnitSystem = localStorage.getItem('speedle-endless-units') === 'metric' ? 'metric' : 'imperial';
 let endlessRevealActive = false;
 const leftFacingIcons = new Set([
@@ -248,6 +253,79 @@ async function refreshDailyLeaderboard() {
   }
   updateDailyLeaderboardPanel();
 }
+async function refreshEndlessLeaderboard(force = false) {
+  if (endlessLeaderboardStatus === 'loading' && !force) return;
+  const requestId = ++endlessLeaderboardRequestId;
+  const today = dailyChallenge?.day || new Date().toISOString().slice(0, 10);
+  const participantId = dailyParticipantId(today);
+  endlessLeaderboardStatus = 'loading';
+  endlessLeaderboardError = '';
+  updateEndlessLeaderboardPanel();
+  try {
+    const query = new URLSearchParams({ participant: participantId });
+    const response = await fetch(`/api/endless-leaderboard?${query}`, { cache: 'no-store' });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not load the Endless leaderboard.');
+    if (requestId !== endlessLeaderboardRequestId) return;
+    endlessLeaderboard = data;
+    endlessBest = Math.max(endlessBest, Number(data.myBestScore) || 0);
+    localStorage.setItem('speedle-endless-best', String(endlessBest));
+    endlessLeaderboardStatus = 'ready';
+  } catch (error) {
+    if (requestId !== endlessLeaderboardRequestId) return;
+    endlessLeaderboardError = error.message;
+    endlessLeaderboardStatus = 'error';
+  }
+  const bestReadout = view.querySelector('#endless-best-score');
+  if (bestReadout) bestReadout.textContent = String(endlessBest);
+  updateEndlessLeaderboardPanel();
+  if (!endlessScoreSyncing && endlessLeaderboardStatus === 'ready' && endlessBest > Number(endlessLeaderboard?.myBestScore || 0)) {
+    endlessScoreSyncing = true;
+    void submitEndlessScore(endlessBest).finally(() => { endlessScoreSyncing = false; });
+  }
+}
+async function submitEndlessScore(score) {
+  if (!Number.isSafeInteger(score) || score < 1) return;
+  const today = dailyChallenge?.day || new Date().toISOString().slice(0, 10);
+  const participantId = dailyParticipantId(today);
+  try {
+    const response = await fetch('/api/endless-score', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ participantId, score }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not save your Endless score.');
+    endlessBest = Math.max(endlessBest, Number(data.bestScore) || 0);
+    localStorage.setItem('speedle-endless-best', String(endlessBest));
+    await refreshEndlessLeaderboard(true);
+  } catch (error) {
+    endlessLeaderboardError = error.message;
+    endlessLeaderboardStatus = 'error';
+    updateEndlessLeaderboardPanel();
+  }
+}
+function endlessLeaderboardPanel() {
+  const header = `<div class="daily-community-head"><div><div class="eyebrow">ENDLESS LEADERBOARD</div><h3>Best runs</h3></div><button class="community-refresh" id="endless-leaderboard-refresh" type="button" aria-label="Refresh Endless leaderboard" title="Refresh leaderboard" ${endlessLeaderboardStatus === 'loading' ? 'disabled' : ''}>↻</button></div>`;
+  if (endlessLeaderboardStatus === 'idle' || endlessLeaderboardStatus === 'loading') return `${header}<div class="community-message"><span class="spinner"></span> Loading best runs…</div>`;
+  if (endlessLeaderboardStatus === 'error') return `${header}<div class="community-message"><span>${escapeHtml(endlessLeaderboardError || 'Could not load the Endless leaderboard.')}</span><button class="btn community-retry" id="endless-leaderboard-retry" type="button">Try again</button></div>`;
+  const profile = endlessLeaderboard?.profile;
+  const rank = endlessLeaderboard?.myRank ? `#${endlessLeaderboard.myRank}` : '—';
+  const rows = endlessLeaderboard?.entries?.length
+    ? endlessLeaderboard.entries.map(row => `<li class="endless-leaderboard-row ${row.rank === endlessLeaderboard?.myRank ? 'is-you' : ''}"><span class="daily-leaderboard-rank">${row.rank}</span><span class="daily-leaderboard-name">${escapeHtml(row.displayName)}</span><strong>${row.bestScore}</strong></li>`).join('')
+    : '<li class="daily-leaderboard-empty">Finish an Endless run to claim the first spot.</li>';
+  const yourRow = endlessLeaderboard?.myRank > 10
+    ? `<li class="endless-leaderboard-row is-you daily-leaderboard-your-row"><span class="daily-leaderboard-rank">${endlessLeaderboard.myRank}</span><span class="daily-leaderboard-name">${escapeHtml(profile?.displayName || 'You')}</span><strong>${endlessLeaderboard.myBestScore}</strong></li>`
+    : '';
+  const stats = `<div class="endless-leaderboard-stats"><div><strong>${endlessLeaderboard?.myBestScore || 0}</strong><span>YOUR BEST</span></div><div><strong>${rank}</strong><span>YOUR RANK</span></div></div>`;
+  return `${header}${stats}<div class="endless-leaderboard-labels" aria-hidden="true"><span>RANK</span><span>PLAYER</span><span>BEST RUN</span></div><ol class="endless-leaderboard-list">${rows}${yourRow}</ol><p class="endless-leaderboard-note">Save your display name from the profile button in the header.</p>`;
+}
+function updateEndlessLeaderboardPanel() {
+  const slot = view.querySelector('#endless-leaderboard-slot');
+  if (!slot) return;
+  slot.innerHTML = endlessLeaderboardPanel();
+  slot.querySelector('#endless-leaderboard-refresh')?.addEventListener('click', () => void refreshEndlessLeaderboard(true));
+  slot.querySelector('#endless-leaderboard-retry')?.addEventListener('click', () => void refreshEndlessLeaderboard(true));
+}
 function dailyLeaderboardPanel() {
   const header = `<div class="daily-community-head"><div><div class="eyebrow">DAILY LEADERBOARD</div><h3>Today’s players</h3></div><button class="community-refresh" id="daily-leaderboard-refresh" type="button" aria-label="Refresh daily leaderboard" title="Refresh leaderboard" ${dailyLeaderboardStatus === 'loading' ? 'disabled' : ''}>↻</button></div>`;
   if (dailyLeaderboardStatus === 'loading' || dailyLeaderboardStatus === 'idle') return `<section class="daily-leaderboard" aria-live="polite">${header}<div class="community-message"><span class="spinner"></span> Loading your player profile…</div></section>`;
@@ -268,19 +346,43 @@ function dailyLeaderboardPanel() {
       : '<small>Submit a daily guess to extend your streak. Your profile is saved in this browser.</small>';
   return `<section class="daily-leaderboard" aria-live="polite">${header}<div class="daily-streak-stats"><div><strong>${profile?.currentStreak || 0}</strong><span>DAY STREAK</span></div><div><strong>${profile?.bestStreak || 0}</strong><span>BEST STREAK</span></div><div><strong>${rank}</strong><span>TODAY’S RANK</span></div></div><form class="daily-profile-form" id="daily-profile-form"><label for="daily-profile-name">YOUR LEADERBOARD NAME</label><div><input id="daily-profile-name" name="displayName" maxlength="18" value="${escapeHtml(dailyProfileDraft || profile?.displayName || '')}" autocomplete="nickname" aria-label="Your leaderboard name" required><button class="btn" type="submit">Save name</button></div>${profileMessage}</form><ol class="daily-leaderboard-list">${rows}${yourRow}</ol></section>`;
 }
+function dailyTabLeaderboardPanel() {
+  const header = `<div class="daily-community-head"><div><div class="eyebrow">DAILY LEADERBOARD</div><h3>Today’s players</h3></div><button class="community-refresh" id="daily-tab-leaderboard-refresh" type="button" aria-label="Refresh daily leaderboard" title="Refresh leaderboard" ${dailyLeaderboardStatus === 'loading' ? 'disabled' : ''}>↻</button></div>`;
+  if (dailyLeaderboardStatus === 'loading' || dailyLeaderboardStatus === 'idle') return `${header}<div class="community-message"><span class="spinner"></span> Loading today’s players…</div>`;
+  if (dailyLeaderboardStatus === 'error') return `${header}<div class="community-message"><span>${escapeHtml(dailyLeaderboardError || 'Could not load the daily leaderboard.')}</span><button class="btn community-retry" id="daily-tab-leaderboard-retry" type="button">Try again</button></div>`;
+  const profile = dailyLeaderboard?.profile;
+  const rank = dailyLeaderboard?.myRank ? `#${dailyLeaderboard.myRank}` : '—';
+  const entries = dailyLeaderboard?.entries || [];
+  const rows = entries.length
+    ? entries.map(row => `<li class="daily-leaderboard-row ${row.rank === dailyLeaderboard?.myRank ? 'is-you' : ''}"><span class="daily-leaderboard-rank">${row.rank}</span><span class="daily-leaderboard-name">${escapeHtml(row.displayName)}</span><span class="daily-leaderboard-streak">${row.currentStreak} ${row.currentStreak === 1 ? 'day' : 'days'}</span><strong>${row.accuracy}%</strong></li>`).join('')
+    : '<li class="daily-leaderboard-empty">Submit today’s guess to join the board.</li>';
+  const yourRow = dailyLeaderboard?.myRank > 10
+    ? `<li class="daily-leaderboard-row is-you daily-leaderboard-your-row"><span class="daily-leaderboard-rank">${dailyLeaderboard.myRank}</span><span class="daily-leaderboard-name">${escapeHtml(profile?.displayName || 'You')}</span><span class="daily-leaderboard-streak">${profile?.currentStreak || 0} ${(profile?.currentStreak || 0) === 1 ? 'day' : 'days'}</span><strong>${dailyLeaderboard.myAccuracy}%</strong></li>`
+    : '';
+  return `${header}<div class="daily-streak-stats"><div><strong>${profile?.currentStreak || 0}</strong><span>YOUR STREAK</span></div><div><strong>${profile?.bestStreak || 0}</strong><span>BEST STREAK</span></div><div><strong>${rank}</strong><span>TODAY’S RANK</span></div></div><div class="daily-leaderboard-columns" aria-hidden="true"><span>RANK</span><span>PLAYER</span><span>STREAK</span><span>ACCURACY</span></div><ol class="daily-leaderboard-list">${rows}${yourRow}</ol><p class="daily-leaderboard-note">Ranked by today’s accuracy, with each player’s daily streak shown. Submit once a day to keep your streak alive.</p>`;
+}
+function updateDailyTabLeaderboardPanel() {
+  const slot = view.querySelector('#daily-tab-leaderboard-slot');
+  if (!slot) return;
+  slot.innerHTML = dailyTabLeaderboardPanel();
+  slot.querySelector('#daily-tab-leaderboard-refresh')?.addEventListener('click', () => void refreshDailyLeaderboard());
+  slot.querySelector('#daily-tab-leaderboard-retry')?.addEventListener('click', () => void refreshDailyLeaderboard());
+}
 function updateDailyLeaderboardPanel() {
   const slot = document.querySelector('#daily-leaderboard-content');
-  if (!slot) return;
-  slot.innerHTML = dailyLeaderboardPanel();
-  slot.querySelector('#daily-leaderboard-refresh')?.addEventListener('click', () => void refreshDailyLeaderboard());
-  slot.querySelector('#daily-leaderboard-retry')?.addEventListener('click', () => void refreshDailyLeaderboard());
-  const nameInput = slot.querySelector('#daily-profile-name');
-  nameInput?.addEventListener('input', event => { dailyProfileDraft = event.currentTarget.value; });
-  slot.querySelector('#daily-profile-form')?.addEventListener('submit', event => {
-    event.preventDefault();
-    const displayName = String(new FormData(event.currentTarget).get('displayName') || '').trim();
-    void saveDailyDisplayName(displayName);
-  });
+  if (slot) {
+    slot.innerHTML = dailyLeaderboardPanel();
+    slot.querySelector('#daily-leaderboard-refresh')?.addEventListener('click', () => void refreshDailyLeaderboard());
+    slot.querySelector('#daily-leaderboard-retry')?.addEventListener('click', () => void refreshDailyLeaderboard());
+    const nameInput = slot.querySelector('#daily-profile-name');
+    nameInput?.addEventListener('input', event => { dailyProfileDraft = event.currentTarget.value; });
+    slot.querySelector('#daily-profile-form')?.addEventListener('submit', event => {
+      event.preventDefault();
+      const displayName = String(new FormData(event.currentTarget).get('displayName') || '').trim();
+      void saveDailyDisplayName(displayName);
+    });
+  }
+  updateDailyTabLeaderboardPanel();
 }
 async function saveDailyDisplayName(displayName) {
   if (!dailyChallenge) return;
@@ -310,6 +412,7 @@ async function saveDailyDisplayName(displayName) {
     dailyProfileNotice = 'Name saved.';
     updateDailyLeaderboardPanel();
     await refreshDailyLeaderboard();
+    void refreshEndlessLeaderboard(true);
   } catch (error) {
     dailyLeaderboardError = error.message;
     dailyLeaderboardStatus = 'error';
@@ -342,8 +445,8 @@ function dailyCommunityPanel() {
   return `<section class="daily-community" aria-live="polite">${header}<div class="community-stats"><div><strong>${average}</strong><span>AVERAGE ACCURACY</span></div><div><strong>${percentile}</strong><span>BEAT</span></div></div><div class="community-plot"><div class="community-y-axis" aria-hidden="true"><span>100%</span><span>50%</span><span>0%</span></div><div class="community-chart" role="img" aria-label="Bell-curve baseline combined with community scores in 10 percent ranges. The vertical scale is relative to the largest score range. Your score is ${stats.myAccuracy} percent.">${bars}</div></div><div class="community-x-axis" aria-hidden="true"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div><div class="community-axis-note"><span class="community-your-key"><i></i> YOUR SCORE RANGE</span></div></section>`;
 }
 function dailyPanel() {
-  if (dailyDeckStatus === 'loading' || dailyDeckStatus === 'idle') return `<div class="daily-loading"><span class="spinner"></span> Loading today’s shared challenge…</div>`;
-  if (dailyDeckStatus === 'error') return `<div class="daily-loading"><p>${escapeHtml(dailyError || 'Could not load today’s challenge.')}</p><button class="btn btn-primary btn-full" id="daily-retry">Try again</button></div>`;
+  if (dailyDeckStatus === 'loading' || dailyDeckStatus === 'idle') return `<div class="daily-loading"><span class="spinner"></span> Loading today’s shared challenge…</div><section class="daily-leaderboard daily-tab-leaderboard" id="daily-tab-leaderboard-slot">${dailyTabLeaderboardPanel()}</section>`;
+  if (dailyDeckStatus === 'error') return `<div class="daily-loading"><p>${escapeHtml(dailyError || 'Could not load today’s challenge.')}</p><button class="btn btn-primary btn-full" id="daily-retry">Try again</button></div><section class="daily-leaderboard daily-tab-leaderboard" id="daily-tab-leaderboard-slot">${dailyTabLeaderboardPanel()}</section>`;
   const question = dailyChallenge.question;
   const max = SLIDER_STEPS;
   const value = dailyGuess ?? Math.round(SLIDER_STEPS / 2);
@@ -357,7 +460,7 @@ function dailyPanel() {
     : `<div class="daily-control-row"><div class="daily-unit-row"><div class="endless-unit-switch daily-unit-switch" id="daily-unit-system" role="group" aria-label="Daily Speedle speed units" data-active="${dailyUnitSystem}"><span class="endless-unit-indicator" aria-hidden="true"></span><button class="endless-unit-option ${dailyUnitSystem === 'imperial' ? 'is-active' : ''}" type="button" data-daily-unit="imperial" aria-pressed="${dailyUnitSystem === 'imperial'}">MPH</button><button class="endless-unit-option ${dailyUnitSystem === 'metric' ? 'is-active' : ''}" type="button" data-daily-unit="metric" aria-pressed="${dailyUnitSystem === 'metric'}">KM/H</button></div></div><div class="guess-control daily-guess-control"><div class="guess-top"><label for="daily-guess-slider">SET YOUR GUESSED SPEED</label><div class="guess-number"><span id="daily-guess-readout">${displaySliderGuess(value, question, dailyUnitSystem)}</span> <small>${unitLabel(dailyUnitSystem)}</small></div></div><div class="range-wrap"><input class="range" id="daily-guess-slider" type="range" min="0" max="${max}" value="${value}" step="1" style="--progress:${value / max * 100}%" aria-label="Set your daily speed guess in ${dailyUnitSystem === 'metric' ? 'kilometres per hour' : 'miles per hour'}"/></div><div class="range-labels"><span>${displaySpeed(MIN_GUESS_MPH, dailyUnitSystem)} ${unitShort(dailyUnitSystem)}</span><span>${displayRange(question, dailyUnitSystem)} ${unitShort(dailyUnitSystem)}</span></div></div><button class="btn btn-primary daily-submit" id="daily-submit">Reveal today’s speed</button></div>`;
   return `<div class="daily-head"><div><h2>Daily Speedle</h2></div><span class="count-tag">${escapeHtml(formattedDate)}</span></div>
     <div class="daily-question-strip"><div class="daily-question-copy"><div class="eyebrow">${escapeHtml(question.kind)}</div><h3>${escapeHtml(question.name)}</h3><p class="object-blurb">${escapeHtml(result ? displaySpeedNote(question.note, resultUnit) : objectBlurb(question.note))}</p></div>${questionImageMarkup(question, 'daily-question-image')}</div>
-    <div class="daily-lanes-wrap">${speedLanes(question, shownGuess, Boolean(result), resultUnit)}</div>${resultContent}`;
+    <div class="daily-lanes-wrap">${speedLanes(question, shownGuess, Boolean(result), resultUnit)}</div>${resultContent}<section class="daily-leaderboard daily-tab-leaderboard" id="daily-tab-leaderboard-slot">${dailyTabLeaderboardPanel()}</section>`;
 }
 function renderDailyCard() {
   const content = view.querySelector('#daily-challenge-content');
@@ -522,14 +625,16 @@ function chooseEndlessObject(index) {
     endlessRoundStatus = 'correct';
   } else {
     endlessRoundStatus = 'over';
+    void submitEndlessScore(endlessScore);
   }
   endlessRevealActive = true;
   try { renderEndlessCard(); } finally { endlessRevealActive = false; }
 }
 function endlessPanel() {
-  if (endlessDeckStatus === 'idle' || endlessDeckStatus === 'loading') return `<div class="daily-loading"><span class="spinner"></span> Loading the speed deck…</div>`;
-  if (endlessDeckStatus === 'error') return `<div class="daily-loading"><p>${escapeHtml(endlessError || 'Could not load the speed deck.')}</p><button class="btn btn-primary btn-full" id="endless-retry">Try again</button></div>`;
-  if (!endlessPair) return `<div class="daily-loading"><p>Couldn’t find a new pair. Try again.</p><button class="btn btn-primary btn-full" id="endless-restart">Start again</button></div>`;
+  const leaderboardSlot = `<section class="endless-leaderboard" id="endless-leaderboard-slot" aria-live="polite">${endlessLeaderboardPanel()}</section>`;
+  if (endlessDeckStatus === 'idle' || endlessDeckStatus === 'loading') return `<div class="daily-loading"><span class="spinner"></span> Loading the speed deck…</div>${leaderboardSlot}`;
+  if (endlessDeckStatus === 'error') return `<div class="daily-loading"><p>${escapeHtml(endlessError || 'Could not load the speed deck.')}</p><button class="btn btn-primary btn-full" id="endless-retry">Try again</button></div>${leaderboardSlot}`;
+  if (!endlessPair) return `<div class="daily-loading"><p>Couldn’t find a new pair. Try again.</p><button class="btn btn-primary btn-full" id="endless-restart">Start again</button></div>${leaderboardSlot}`;
   const answered = endlessRoundStatus !== 'guessing';
   const faster = endlessPair[0].speed > endlessPair[1].speed ? endlessPair[0] : endlessPair[1];
   const target = faster;
@@ -571,7 +676,7 @@ function endlessPanel() {
       ? '<button class="btn btn-primary" id="endless-restart">Play again</button>'
       : '';
   const feedback = `<div class="endless-feedback ${resultClass} ${endlessRevealActive ? 'is-entering' : ''}" aria-live="polite"><div><strong>${title}</strong><span>${answered ? message : endlessIntroPhase === 'loading' ? message : endlessReady ? message : 'Wait for GO! to make your pick.'}</span></div>${action}</div>`;
-  return `<div class="endless-head"><div><h2>Endless Speedle</h2><p>Choose the faster object. Keep your streak alive.</p></div><div class="endless-unit-control"><div class="endless-unit-switch" id="endless-unit-system" role="group" aria-label="Endless game speed units" data-active="${endlessUnitSystem}"><span class="endless-unit-indicator" aria-hidden="true"></span><button class="endless-unit-option ${endlessUnitSystem === 'imperial' ? 'is-active' : ''}" type="button" data-endless-unit="imperial" aria-pressed="${endlessUnitSystem === 'imperial'}" ${endlessReady ? '' : 'disabled'}>MPH</button><button class="endless-unit-option ${endlessUnitSystem === 'metric' ? 'is-active' : ''}" type="button" data-endless-unit="metric" aria-pressed="${endlessUnitSystem === 'metric'}" ${endlessReady ? '' : 'disabled'}>KM/H</button></div></div></div><div class="endless-scoreboard"><div><strong>${endlessScore}</strong><span>STREAK</span></div><div><strong>${endlessBest}</strong><span>BEST</span></div></div><div class="endless-stage" id="endless-stage" data-phase="${escapeHtml(endlessIntroPhase)}"><div class="endless-pair">${choices}</div>${vs}${countdown}</div>${feedback}`;
+  return `<div class="endless-head"><div><h2>Endless Speedle</h2><p>Choose the faster object. Keep your streak alive.</p></div><div class="endless-unit-control"><div class="endless-unit-switch" id="endless-unit-system" role="group" aria-label="Endless game speed units" data-active="${endlessUnitSystem}"><span class="endless-unit-indicator" aria-hidden="true"></span><button class="endless-unit-option ${endlessUnitSystem === 'imperial' ? 'is-active' : ''}" type="button" data-endless-unit="imperial" aria-pressed="${endlessUnitSystem === 'imperial'}" ${endlessReady ? '' : 'disabled'}>MPH</button><button class="endless-unit-option ${endlessUnitSystem === 'metric' ? 'is-active' : ''}" type="button" data-endless-unit="metric" aria-pressed="${endlessUnitSystem === 'metric'}" ${endlessReady ? '' : 'disabled'}>KM/H</button></div></div></div><div class="endless-scoreboard"><div><strong>${endlessScore}</strong><span>STREAK</span></div><div><strong id="endless-best-score">${endlessBest}</strong><span>BEST</span></div></div><div class="endless-stage" id="endless-stage" data-phase="${escapeHtml(endlessIntroPhase)}"><div class="endless-pair">${choices}</div>${vs}${countdown}</div>${feedback}${leaderboardSlot}`;
 }
 function updateEndlessIntroStage() {
   const stage = view.querySelector('#endless-stage');
@@ -625,6 +730,7 @@ function renderEndlessCard() {
   const content = view.querySelector('#endless-challenge-content');
   if (!content || state) return;
   content.innerHTML = endlessPanel();
+  updateEndlessLeaderboardPanel();
   endlessPair?.forEach((item, index) => {
     const imageId = `endless-object-image-${index}`;
     void loadQuestionImage(item).then(() => {
@@ -664,11 +770,15 @@ function setSoloMode(mode) {
     button.setAttribute('aria-selected', String(active));
   });
   syncModeNav();
-  if (soloMode === 'endless') void loadEndlessDeck();
+  if (soloMode === 'endless') {
+    void loadEndlessDeck();
+    void refreshEndlessLeaderboard();
+  }
 }
 function syncModeNav() {
+  const activeMode = state || location.hash === '#room-entry' ? 'friends' : soloMode;
   document.querySelectorAll('[data-header-mode]').forEach(link => {
-    if (link.dataset.headerMode === soloMode) link.setAttribute('aria-current', 'page');
+    if (link.dataset.headerMode === activeMode) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
 }
@@ -906,6 +1016,8 @@ function createLanding() {
       <div class="hero-meta"><span>2–8 PLAYERS</span><span>DAILY SOLO CHALLENGE</span><span>ENDLESS MODE</span></div>
     </div>
   </section>
+  <section class="daily-section" id="daily-speedle"><div class="daily-game-panel panel"><div class="solo-mode-tabs" role="tablist" aria-label="Solo game modes"><button class="solo-mode-tab ${soloMode === 'daily' ? 'active' : ''}" type="button" role="tab" data-solo-mode="daily" aria-selected="${soloMode === 'daily'}">Daily Speedle</button><button class="solo-mode-tab ${soloMode === 'endless' ? 'active' : ''}" type="button" role="tab" data-solo-mode="endless" aria-selected="${soloMode === 'endless'}">Endless</button></div><div id="daily-challenge-content" class="${soloMode === 'daily' ? '' : 'hidden'}">${dailyPanel()}</div><div id="endless-challenge-content" class="${soloMode === 'endless' ? '' : 'hidden'}">${endlessPanel()}</div></div></section>
+  <section class="rules"><div class="rule"><span class="rule-no">01</span><strong>Pick your speed</strong><span>Slide to your best guess of the object’s top speed.</span></div><div class="rule"><span class="rule-no">02</span><strong>Protect your health</strong><span>Miss by more, lose more. Damage is capped at 100 HP each round.</span></div><div class="rule"><span class="rule-no">03</span><strong>Stay in the race</strong><span>Hit zero and you’re out. Last one standing wins.</span></div></section>
   <section class="entry-section" id="room-entry" aria-labelledby="entry-title">
     <div class="entry-intro"><div class="eyebrow"><span class="bar"></span> PLAY WITH FRIENDS</div><h2 id="entry-title">Bring the group together.</h2><p>Create a room and share the code, or join a friend who’s already playing.</p></div>
     <div class="entry-card"><div class="tabs"><button class="tab ${selectedTab === 'create' ? 'active' : ''}" data-tab="create">Create a room</button><button class="tab ${selectedTab === 'join' ? 'active' : ''}" data-tab="join">Join a room</button></div>
@@ -914,8 +1026,7 @@ function createLanding() {
       <button class="btn btn-primary btn-full" type="submit">${selectedTab === 'create' ? 'Create a room  ↗' : 'Join the game  →'}</button></form>
       <p class="hint">${selectedTab === 'create' ? 'You’ll get a code to share. Friends can join from any phone on the same Wi-Fi.' : inviteRoomCode ? 'You were invited to a room. Add your name and jump in.' : 'Ask your host for their room code and join the lobby.'}</p>
     </div>
-  </section><section class="rules"><div class="rule"><span class="rule-no">01</span><strong>Pick your speed</strong><span>Slide to your best guess of the object’s top speed.</span></div><div class="rule"><span class="rule-no">02</span><strong>Protect your health</strong><span>Miss by more, lose more. Damage is capped at 100 HP each round.</span></div><div class="rule"><span class="rule-no">03</span><strong>Stay in the race</strong><span>Hit zero and you’re out. Last one standing wins.</span></div></section>
-  <section class="daily-section" id="daily-speedle"><div class="daily-game-panel panel"><div class="solo-mode-tabs" role="tablist" aria-label="Solo game modes"><button class="solo-mode-tab ${soloMode === 'daily' ? 'active' : ''}" type="button" role="tab" data-solo-mode="daily" aria-selected="${soloMode === 'daily'}">Daily Speedle</button><button class="solo-mode-tab ${soloMode === 'endless' ? 'active' : ''}" type="button" role="tab" data-solo-mode="endless" aria-selected="${soloMode === 'endless'}">Endless</button></div><div id="daily-challenge-content" class="${soloMode === 'daily' ? '' : 'hidden'}">${dailyPanel()}</div><div id="endless-challenge-content" class="${soloMode === 'endless' ? '' : 'hidden'}">${endlessPanel()}</div></div></section>
+  </section>
   <section class="seo-copy" aria-labelledby="about-speedle-title">
     <div class="eyebrow"><span class="bar"></span> THE SPEED GUESSING GAME</div>
     <h2 id="about-speedle-title">How well do you know top speeds?</h2>
@@ -1047,6 +1158,7 @@ function gameView() {
     </section><aside class="sidebar"><div class="side-card"><div class="panel-top"><div class="side-title" style="margin:0">HEALTH CHECK</div><span class="online-count"><i></i>${alivePlayers.length} ALIVE</span></div><div style="height:15px"></div>${healthList(state.players)}</div><div class="side-card"><div class="side-title">DAMAGE METER</div><div class="callout">The closer your slider is to the answer, the less health you lose. A perfect guess costs <strong>0 HP</strong>. ${guessing ? 'Miss the entire slider range and lose up to 100 HP.' : 'A missed guess at time runs out costs 100 HP.'}</div></div></aside></div>`;
 }
 function render() {
+  syncModeNav();
   if (!state) { createLanding(); return; }
   if (state.phase === 'lobby') view.innerHTML = lobby(); else view.innerHTML = gameView();
   if (state.current && revealedQuestionImages.get(state.current.name)) renderQuestionImage(state.current.name);
@@ -1113,11 +1225,13 @@ document.querySelector('.brand')?.addEventListener('click', event => {
 });
 document.querySelectorAll('[data-header-mode]').forEach(link => link.addEventListener('click', event => {
   event.preventDefault();
-  const mode = link.dataset.headerMode === 'endless' ? 'endless' : 'daily';
+  const mode = link.dataset.headerMode;
   if (state || playerId || roomCode || inviteRoomCode) leaveRoom();
-  setSoloMode(mode);
-  history.replaceState({}, '', '/#daily-speedle');
-  view.querySelector('#daily-speedle')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (mode === 'daily' || mode === 'endless') setSoloMode(mode);
+  const targetId = mode === 'friends' ? 'room-entry' : 'daily-speedle';
+  history.replaceState({}, '', `/#${targetId}`);
+  view.querySelector(`#${targetId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  syncModeNav();
 }));
 syncModeNav();
 if (playerId && roomCode) connect(roomCode); else createLanding();

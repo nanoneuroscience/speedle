@@ -73,6 +73,11 @@ function dailyQuestionFor(day) {
   const index = ((utcDayNumber(day) % dailyDeck.length) + dailyDeck.length) % dailyDeck.length;
   return dailyDeck[index];
 }
+function currentStreakForDay(profile, day) {
+  if (!profile?.lastPlayedDay || !Number.isInteger(profile.currentStreak)) return 0;
+  const daysSincePlayed = utcDayNumber(day) - utcDayNumber(profile.lastPlayedDay);
+  return daysSincePlayed >= 0 && daysSincePlayed <= 1 ? profile.currentStreak : 0;
+}
 function sliderPositionForSpeed(speed, question) {
   const min = 1;
   const max = Number(question.range);
@@ -115,8 +120,8 @@ function defaultProfile(id) {
 function cleanDisplayName(value) {
   return Array.from(String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim()).slice(0, 18).join('');
 }
-function publicProfile(profile) {
-  return { displayName: containsBlockedName(profile.displayName) ? 'Speedster' : profile.displayName, currentStreak: profile.currentStreak, bestStreak: profile.bestStreak };
+function publicProfile(profile, day = new Date().toISOString().slice(0, 10)) {
+  return { displayName: containsBlockedName(profile.displayName) ? 'Speedster' : profile.displayName, currentStreak: currentStreakForDay(profile, day), bestStreak: profile.bestStreak };
 }
 function updateProfileStreak(profile, day) {
   if (profile.lastPlayedDay === day) return profile;
@@ -138,7 +143,8 @@ async function loadDailyScoreStore(day, questionId) {
   try { previous = JSON.parse(await readFile(scoreDataFile, 'utf8')); } catch {}
   const sameDayStore = previous?.day === day && previous?.questionId === questionId && previous.participants && typeof previous.participants === 'object';
   const profiles = previous?.profiles && typeof previous.profiles === 'object' ? previous.profiles : {};
-  dailyScoreStore = { version: 2, day, questionId, participants: sameDayStore ? previous.participants : {}, profiles };
+  const endlessScores = previous?.endlessScores && typeof previous.endlessScores === 'object' ? previous.endlessScores : {};
+  dailyScoreStore = { version: 2, day, questionId, participants: sameDayStore ? previous.participants : {}, profiles, endlessScores };
   dailyScoreStoreDay = day;
   dailyScoreStoreQuestionId = questionId;
   await persistDailyScoreStore();
@@ -236,13 +242,13 @@ const server = http.createServer(async (req, res) => {
         const ranked = Object.entries(dailyScoreStore.participants)
           .filter(([hash, accuracy]) => dailyScoreStore.profiles[hash] && Number.isInteger(accuracy) && accuracy >= 0 && accuracy <= 100)
           .map(([hash, accuracy]) => ({ hash, accuracy, profile: dailyScoreStore.profiles[hash] }))
-          .sort((a, b) => b.accuracy - a.accuracy || b.profile.currentStreak - a.profile.currentStreak || a.profile.displayName.localeCompare(b.profile.displayName));
+          .sort((a, b) => b.accuracy - a.accuracy || currentStreakForDay(b.profile, day) - currentStreakForDay(a.profile, day) || a.profile.displayName.localeCompare(b.profile.displayName));
         const myRank = ranked.findIndex(row => row.hash === key) + 1 || null;
         const myAccuracy = dailyScoreStore.participants[key] ?? null;
         return {
           day,
-          profile: publicProfile(dailyScoreStore.profiles[key]),
-          entries: ranked.slice(0, 10).map((row, index) => ({ rank: index + 1, displayName: publicProfile(row.profile).displayName, accuracy: row.accuracy, currentStreak: row.profile.currentStreak })),
+          profile: publicProfile(dailyScoreStore.profiles[key], day),
+          entries: ranked.slice(0, 10).map((row, index) => ({ rank: index + 1, displayName: publicProfile(row.profile, day).displayName, accuracy: row.accuracy, currentStreak: currentStreakForDay(row.profile, day) })),
           myRank,
           myAccuracy,
         };
@@ -252,6 +258,68 @@ const server = http.createServer(async (req, res) => {
     } catch (error) {
       console.error('Could not read the daily leaderboard:', error.message);
       return send(res, 503, { error: 'The daily leaderboard is temporarily unavailable.' });
+    }
+  }
+  if (url.pathname === '/api/endless-leaderboard') {
+    if (req.method !== 'GET') return send(res, 405, { error: 'Use GET.' });
+    const participantId = url.searchParams.get('participant') || '';
+    const day = new Date().toISOString().slice(0, 10);
+    if (!/^[0-9a-f-]{36}$/i.test(participantId)) return send(res, 400, { error: 'Could not load the Endless leaderboard.' });
+    try {
+      const operation = dailyScoreWrites.then(async () => {
+        const store = await loadDailyScoreStore(day, dailyQuestionFor(day).id);
+        const key = profileHash(participantId);
+        if (!store.profiles[key]) {
+          dailyScoreStore = { ...store, profiles: { ...store.profiles, [key]: defaultProfile(participantId) } };
+          try { await persistDailyScoreStore(); } catch (error) { dailyScoreStore = store; throw error; }
+        }
+        const validScores = Object.entries(dailyScoreStore.endlessScores || {})
+          .filter(([hash, score]) => dailyScoreStore.profiles[hash] && Number.isInteger(score) && score > 0)
+          .map(([hash, bestScore]) => ({ hash, bestScore, profile: dailyScoreStore.profiles[hash] }))
+          .sort((a, b) => b.bestScore - a.bestScore || a.profile.displayName.localeCompare(b.profile.displayName));
+        const myRank = validScores.findIndex(row => row.hash === key) + 1 || null;
+        return {
+          profile: publicProfile(dailyScoreStore.profiles[key], day),
+          entries: validScores.slice(0, 10).map((row, index) => ({ rank: index + 1, displayName: publicProfile(row.profile, day).displayName, bestScore: row.bestScore })),
+          myRank,
+          myBestScore: dailyScoreStore.endlessScores?.[key] || 0,
+        };
+      });
+      dailyScoreWrites = operation.catch(() => {});
+      return send(res, 200, await operation);
+    } catch (error) {
+      console.error('Could not read the Endless leaderboard:', error.message);
+      return send(res, 503, { error: 'The Endless leaderboard is temporarily unavailable.' });
+    }
+  }
+  if (url.pathname === '/api/endless-score') {
+    if (req.method !== 'POST') return send(res, 405, { error: 'Use POST.' });
+    let data;
+    try { data = await readJsonBody(req); } catch (error) { return send(res, 400, { error: error.message }); }
+    const participantId = String(data.participantId || '');
+    const score = Number(data.score);
+    const day = new Date().toISOString().slice(0, 10);
+    if (!/^[0-9a-f-]{36}$/i.test(participantId)) return send(res, 400, { error: 'Could not save your Endless score.' });
+    if (!Number.isSafeInteger(score) || score < 1 || score > 100000) return send(res, 400, { error: 'That Endless score is invalid.' });
+    const operation = dailyScoreWrites.then(async () => {
+      const store = await loadDailyScoreStore(day, dailyQuestionFor(day).id);
+      const key = profileHash(participantId);
+      const previousBest = Number.isSafeInteger(store.endlessScores?.[key]) ? store.endlessScores[key] : 0;
+      const profiles = store.profiles[key] ? store.profiles : { ...store.profiles, [key]: defaultProfile(participantId) };
+      if (score <= previousBest && profiles === store.profiles) return { saved: true, bestScore: previousBest };
+      dailyScoreStore = {
+        ...store,
+        profiles,
+        endlessScores: score > previousBest ? { ...(store.endlessScores || {}), [key]: score } : (store.endlessScores || {}),
+      };
+      try { await persistDailyScoreStore(); } catch (error) { dailyScoreStore = store; throw error; }
+      return { saved: true, bestScore: Math.max(previousBest, score) };
+    });
+    dailyScoreWrites = operation.catch(() => {});
+    try { return send(res, 200, await operation); }
+    catch (error) {
+      console.error('Could not save Endless score:', error.message);
+      return send(res, 503, { error: 'Your Endless score could not be saved right now.' });
     }
   }
   if (url.pathname === '/api/daily-profile') {
@@ -270,7 +338,7 @@ const server = http.createServer(async (req, res) => {
       const profile = { ...(store.profiles[key] || defaultProfile(participantId)), displayName };
       dailyScoreStore = { ...store, profiles: { ...store.profiles, [key]: profile } };
       try { await persistDailyScoreStore(); } catch (error) { dailyScoreStore = store; throw error; }
-      return publicProfile(profile);
+      return publicProfile(profile, day);
     });
     dailyScoreWrites = operation.catch(() => {});
     try { return send(res, 200, { profile: await operation }); }
