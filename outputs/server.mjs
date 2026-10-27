@@ -5,6 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { ClimbError, createClimbEngine } from './climb.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 4173);
@@ -24,6 +25,7 @@ const dailyDeck = JSON.parse(await readFile(path.join(here, 'public', 'daily-dec
 if (!Array.isArray(dailyDeck) || !dailyDeck.length) throw new Error('The daily question deck is empty.');
 
 const deck = dailyDeck;
+const climb = createClimbEngine({ deck: dailyDeck, dataDir: scoreDataDir, describe: objectBlurb });
 
 function roomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -211,6 +213,20 @@ function beginRound(room) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   if (req.method === 'OPTIONS') { res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-headers': 'content-type' }); return res.end(); }
+  if (url.pathname === '/api/climb' || url.pathname === '/api/climb/answer') {
+    const expectedMethod = url.pathname === '/api/climb' ? 'GET' : 'POST';
+    if (req.method !== expectedMethod) return send(res, 405, { error: `Use ${expectedMethod}.` });
+    try {
+      if (req.method === 'GET') return send(res, 200, await climb.get(url.searchParams.get('participant') || ''));
+      let data;
+      try { data = await readJsonBody(req); } catch (error) { return send(res, 400, { error: error.message }); }
+      return send(res, 200, await climb.answer(data));
+    } catch (error) {
+      if (error instanceof ClimbError) return send(res, error.status, { error: error.message });
+      console.error('Could not load or save the daily climb:', error.message);
+      return send(res, 503, { error: 'Your climb could not be saved right now. Please try again.' });
+    }
+  }
   if (url.pathname === '/api/events' && req.method === 'GET') {
     const code = (url.searchParams.get('room') || '').toUpperCase();
     const room = rooms.get(code);
@@ -487,7 +503,9 @@ const server = http.createServer(async (req, res) => {
     return send(res, 404, { error: 'Unknown action.' });
   }
   let requested;
-  try { requested = decodeURIComponent(url.pathname === '/' ? 'index.html' : url.pathname.slice(1)); }
+  try {
+    requested = decodeURIComponent(url.pathname === '/' ? (url.searchParams.has('room') ? 'index.html' : 'mountain.html') : url.pathname === '/classic' || url.pathname === '/classic/' ? 'index.html' : url.pathname.slice(1));
+  }
   catch { return send(res, 400, { error: 'Invalid file path.' }); }
   const publicRoot = path.resolve(here, 'public');
   const file = path.resolve(publicRoot, requested);

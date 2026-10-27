@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#123f43">
+  <meta name="description" content="Ten levels. One mountain. Pick the faster object and climb to the summit in Speedle’s daily speed challenge.">
+  <title>Speedle — Test your speed</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=4">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/mountain.css">
+  <link rel="stylesheet" href="/mountain-scene.css">
+</head>
+<body>
+  <div class="expedition-app">
+    <div class="world-atmosphere" aria-hidden="true"><div class="sun-halo"></div><div class="sky-grain"></div></div>
+    <header class="game-header">
+      <a class="game-brand" href="/" aria-label="Speedle home"><svg viewBox="0 0 70 45" aria-hidden="true"><path d="M3 29 18 24 31 11 45 12 53 7 55 13 66 21 63 27 50 27 40 34 24 33 13 40 6 38 18 27Z"/><path d="m19 24-14-7 17 3m24 7 5 9 14 3-2 4-18-3-10-12m-4 3-3 9-17 2-2-4 13-5 1-9"/><circle cx="57" cy="20" r="1.3" class="brand-eye"/></svg><span>speedle<span class="brand-period">.</span></span></a>
+      <div class="daily-badge"><span class="badge-sun" aria-hidden="true">✳</span><div><span class="badge-label">THE DAILY CLIMB</span><time id="challenge-date">Loading today’s trail</time></div></div>
+      <nav class="game-controls" aria-label="Game controls">
+        <a class="friends-link" href="/classic#room-entry"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v2"/></svg><span>With friends</span></a>
+        <span class="control-separator" aria-hidden="true"></span>
+        <button class="icon-control" id="sound-toggle" aria-label="Turn sound on" aria-pressed="false"></button>
+        <button class="icon-control" id="help-open" aria-label="How to play"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4.1 1.9c-1 .8-1.6 1.1-1.6 2.6m0 3v.1"/></svg></button>
+        <button class="icon-control profile-control" id="profile-open" aria-label="Your expedition log"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></svg></button>
+      </nav>
+    </header>
+
+    <main class="game-layout">
+      <section class="mountain-side" aria-label="Your mountain climb">
+        <div class="journey-heading"><div class="eyebrow"><span></span> A NEW TRAIL EVERY DAY</div><h1>Take the<br><em>high road.</em></h1><p>Ten levels. One mountain.<br>How many matchups will you need?</p></div>
+        <div id="mountain-world" class="mountain-world" aria-hidden="true"></div>
+        <div class="altitude-card"><span class="altitude-icon" aria-hidden="true"><svg viewBox="0 0 30 30"><path d="m3 25 9-17 5 8 4-5 7 14H3Z"/><path d="m9 14 3 3 3-3m3 3 3 2 2-3"/></svg></span><div><span id="biome-label">BASE CAMP</span><strong><span id="altitude">0</span><small> / 10 levels</small></strong></div><div class="altitude-meter"><span id="altitude-meter"></span></div></div>
+        <div class="trail-caption"><span class="trail-caption-line"></span><span>THE ONLY WAY IS UP.</span></div>
+      </section>
+
+      <section class="challenge-side" aria-label="Daily faster-object matchups">
+        <div class="expedition-status"><span class="status-label"><span class="status-dot"></span> TODAY’S EXPEDITION</span><span class="round-count" id="round-count">MATCHUP 01</span></div>
+        <div class="progress-track" id="progress-track" aria-label="Daily question progress"></div>
+        <div class="question-heading"><div><p id="question-kicker" class="question-kicker">TRUST YOUR INSTINCTS</p><h2 id="question-title">Which is faster?</h2></div><div class="unit-switch" role="group" aria-label="Speed units"><button type="button" data-unit="imperial" aria-pressed="true">mph</button><button type="button" data-unit="metric" aria-pressed="false">km/h</button><span aria-hidden="true"></span></div></div>
+        <div id="matchup-stage" class="matchup-stage" aria-busy="true"><div class="loading-trail"><div class="trail-spinner"></div><span>Finding today’s trail…</span></div></div>
+        <div id="round-feedback" class="round-feedback" aria-live="polite"></div>
+        <div class="challenge-footnote" id="challenge-footnote"><span><kbd>←</kbd> <kbd>→</kbd> or tap to choose</span><span>Same trail for everyone <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M2.5 10h15M10 2.5c-4 4-4 11 0 15 4-4 4-11 0-15Z"/></svg></span></div>
+      </section>
+    </main>
+
+    <footer class="game-footer"><span>A LITTLE CURIOSITY GOES A LONG WAY UP.</span><span>CREATED BY MICHAEL DOWNS <i>·</i> A HANDSHAKE × OPENAI PROJECT</span></footer>
+    <div class="particles" id="particles" aria-hidden="true"></div>
+    <div class="notice" id="notice" role="status"></div>
+  </div>
+
+  <dialog class="game-dialog" id="help-dialog" aria-labelledby="help-title"><div class="dialog-content"><button class="dialog-close" data-close aria-label="Close instructions">×</button><span class="modal-eyebrow">YOUR DAILY ADVENTURE</span><h2 id="help-title">A little faster.<br>A little higher.</h2><p>Pick the faster object. Earn ten correct answers to reach the summit.</p><ol class="how-to"><li><span>01</span><div><strong>Choose your champion</strong><p>Tap a photo, or use your left and right arrow keys.</p></div></li><li><span>02</span><div><strong>Make the climb</strong><p>Each correct answer moves your cheetah up one level. Miss one? Hold your ground and keep going.</p></div></li><li><span>03</span><div><strong>Chase the summit</strong><p>Your score is the number of matchups it takes to reach the top. Ten is perfect. A new shared trail arrives at midnight UTC.</p></div></li></ol><button class="gold-button" data-close>Let’s climb <span>↗</span></button></div></dialog>
+  <dialog class="game-dialog" id="profile-dialog" aria-labelledby="profile-title"><div class="dialog-content"><button class="dialog-close" data-close aria-label="Close expedition log">×</button><span class="modal-eyebrow">YOUR EXPEDITION LOG</span><h2 id="profile-title">Leave your mark.</h2><div id="profile-stats" class="profile-stats"></div><form id="profile-form"><label for="display-name">Trail name</label><div class="name-field"><input id="display-name" name="displayName" maxlength="18" autocomplete="nickname" placeholder="Your name"><button type="submit">Save</button></div><p id="profile-feedback" class="profile-feedback" aria-live="polite"></p></form><p class="device-note">Your progress stays with this browser. Come back each day for a new trail.</p></div></dialog>
+  <script type="module" src="/mountain.js"></script>
+</body>
+</html>

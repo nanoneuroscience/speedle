@@ -1,0 +1,87 @@
+.mountain-scene {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  isolation: isolate;
+}
+
+.mountain-scene .mc-world {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.mountain-scene .mc-cloud-one { animation: mc-cloud-drift 25s ease-in-out infinite alternate; }
+.mountain-scene .mc-cloud-two { animation: mc-cloud-drift 32s ease-in-out -9s infinite alternate-reverse; }
+.mountain-scene .mc-cloud-three { animation: mc-cloud-drift 28s ease-in-out -12s infinite alternate; }
+.mountain-scene .mc-cloud-four { animation: mc-cloud-drift 34s ease-in-out -17s infinite alternate-reverse; }
+.mountain-scene .mc-birds { animation: mc-bird-glide 15s ease-in-out infinite alternate; }
+.mountain-scene .mc-summit-flag {
+  transform-box: fill-box;
+  transform-origin: 0 50%;
+  animation: mc-flag-wave 3.4s ease-in-out infinite;
+}
+
+.mountain-scene .mc-checkpoint .mc-node-ring,
+.mountain-scene .mc-checkpoint .mc-node-dot,
+.mountain-scene .mc-checkpoint-plaque path,
+.mountain-scene .mc-checkpoint-plaque text {
+  transition: fill 500ms ease, stroke 500ms ease;
+}
+
+.mountain-scene .mc-checkpoint.is-complete .mc-node-ring { fill: #d3ac5c; stroke: #efd895; }
+.mountain-scene .mc-checkpoint.is-complete .mc-node-dot { fill: #294d4e; }
+.mountain-scene .mc-checkpoint.is-complete .mc-checkpoint-plaque path { fill: #3e5d50; stroke: #d6bc77; }
+.mountain-scene .mc-checkpoint.is-complete .mc-checkpoint-plaque text { fill: #f4d991; }
+.mountain-scene .mc-checkpoint.is-current .mc-node-ring { fill: #ffd577; stroke: #fff1c1; }
+.mountain-scene .mc-checkpoint.is-current .mc-node-dot { fill: #795b27; }
+.mountain-scene .mc-checkpoint.is-current .mc-node-aura { animation: mc-checkpoint-breathe 2.7s ease-in-out infinite; }
+.mountain-scene .mc-checkpoint.is-current .mc-checkpoint-plaque path { fill: #f6d17d; stroke: #fff0bc; }
+.mountain-scene .mc-checkpoint.is-current .mc-checkpoint-plaque text { fill: #344b43; }
+
+.mountain-scene .mc-tail {
+  transform-box: fill-box;
+  transform-origin: 95% 65%;
+  animation: mc-tail-idle 4.6s ease-in-out infinite;
+}
+.mountain-scene .mc-dust { opacity: 0; fill: #f5d694; }
+.mountain-scene .mc-runner-recoil { transform-origin: center; }
+.mountain-scene .mc-leg { transform-box: fill-box; }
+.mountain-scene .mc-cheetah { transform-origin: 0 -30px; }
+.mountain-scene.is-running .mc-cheetah { animation: mc-running-bob 270ms ease-in-out infinite; }
+.mountain-scene.is-running .mc-tail { animation: mc-tail-run 270ms ease-in-out infinite alternate; }
+.mountain-scene.is-running .mc-leg-front { transform-origin: 0 0; animation: mc-front-stride 270ms ease-in-out infinite alternate; }
+.mountain-scene.is-running .mc-leg-front-far { transform-origin: 0 0; animation: mc-front-stride 270ms ease-in-out -135ms infinite alternate; }
+.mountain-scene.is-running .mc-leg-back { transform-origin: 100% 0; animation: mc-back-stride 270ms ease-in-out -135ms infinite alternate; }
+.mountain-scene.is-running .mc-leg-back-far { transform-origin: 100% 0; animation: mc-back-stride 270ms ease-in-out infinite alternate; }
+.mountain-scene.is-running .mc-dust { animation: mc-dust-puff 500ms ease-out infinite; }
+.mountain-scene.is-recoiling .mc-runner-recoil { animation: mc-recoil 460ms cubic-bezier(.2,.7,.3,1) both; }
+.mountain-scene .mc-celebration { pointer-events: none; }
+.mountain-scene .mc-celebration rect { opacity: 0; transform-box: fill-box; transform-origin: center; }
+.mountain-scene.is-celebrating .mc-celebration rect {
+  animation: mc-confetti 2.7s cubic-bezier(.15,.6,.3,1) both;
+  animation-delay: calc(var(--confetti-i) * 27ms);
+}
+.mountain-scene.is-celebrating .mc-summit-flag { animation: mc-flag-wave 650ms ease-in-out infinite; }
+.mountain-scene.is-celebrating .mc-cheetah { animation: mc-summit-hop 700ms ease-in-out 2; }
+
+@keyframes mc-cloud-drift { from { transform: translateX(-17px); } to { transform: translateX(24px); } }
+@keyframes mc-bird-glide { from { transform: translate(-9px, 0); } to { transform: translate(24px, -10px); } }
+@keyframes mc-flag-wave { 0%,100% { transform: skewY(0deg) scaleX(1); } 50% { transform: skewY(-5deg) scaleX(.92); } }
+@keyframes mc-checkpoint-breathe { 0%,100% { opacity: .1; transform: scale(.9); } 50% { opacity: .24; transform: scale(1.16); } }
+@keyframes mc-tail-idle { 0%,100% { transform: rotate(0deg); } 50% { transform: rotate(6deg); } }
+@keyframes mc-tail-run { from { transform: rotate(-7deg); } to { transform: rotate(9deg); } }
+@keyframes mc-running-bob { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-5px) rotate(1deg); } }
+@keyframes mc-front-stride { from { transform: rotate(-30deg); } to { transform: rotate(23deg); } }
+@keyframes mc-back-stride { from { transform: rotate(-24deg); } to { transform: rotate(28deg); } }
+@keyframes mc-dust-puff { 0% { opacity: .5; transform: translate(0, 0) scale(.7); } 100% { opacity: 0; transform: translate(-25px, -7px) scale(1.5); } }
+@keyframes mc-recoil { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-13px) rotate(-5deg); } 60% { transform: translateX(5px) rotate(2deg); } }
+@keyframes mc-confetti { 0% { opacity: 0; transform: translate(0, -12px) rotate(0deg); } 12% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--confetti-x), 270px) rotate(var(--confetti-r)); } }
+@keyframes mc-summit-hop { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-20px) rotate(-4deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mountain-scene *, .mountain-scene.is-running *, .mountain-scene.is-celebrating * { animation: none !important; transition: none !important; }
+  .mountain-scene .mc-checkpoint.is-current .mc-node-aura { opacity: .18; }
+}
