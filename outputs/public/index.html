@@ -72,6 +72,19 @@
       <div id="daily-leaderboard-content"><div class="daily-loading"><span class="spinner"></span> Loading your player profile…</div></div>
     </div>
   </dialog>
+  <dialog class="daily-leaderboard-dialog leaderboard-name-dialog" id="leaderboard-name-dialog" aria-labelledby="leaderboard-name-title" aria-describedby="leaderboard-name-description">
+    <form class="daily-leaderboard-dialog-card">
+      <h2 id="leaderboard-name-title">Add a leaderboard name</h2>
+      <p id="leaderboard-name-description">Your name appears next to your scores on the Daily and Endless leaderboards.</p>
+      <label for="leaderboard-name">Display name</label>
+      <input class="input" id="leaderboard-name" name="displayName" type="text" maxlength="18" autocomplete="nickname" aria-describedby="leaderboard-name-error" required autofocus>
+      <p class="leaderboard-name-error" id="leaderboard-name-error" role="alert"></p>
+      <div class="leaderboard-name-actions">
+        <button class="btn" id="leaderboard-name-skip" type="button">Not now</button>
+        <button class="btn btn-primary" id="leaderboard-name-save" type="submit">Save name</button>
+      </div>
+    </form>
+  </dialog>
   <div id="toast" class="toast" role="status"></div>
   <script src="/app.js" defer></script>
 </body>

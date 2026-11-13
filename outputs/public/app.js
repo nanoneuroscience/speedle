@@ -41,6 +41,10 @@ let dailyLeaderboardRequestId = 0;
 let dailyProfileDraft = '';
 let dailyProfileError = '';
 let dailyProfileNotice = '';
+const pendingNamePrompts = new Set();
+const namePromptDismissedKey = 'speedle-name-prompt-dismissed';
+let namePromptDismissed = sessionStorage.getItem(namePromptDismissedKey) === 'yes';
+let leaderboardNameSaved = false;
 let soloMode = localStorage.getItem('speedle-solo-mode') === 'endless' ? 'endless' : 'daily';
 let endlessDeckStatus = 'idle';
 let endlessDeck = [];
@@ -212,6 +216,7 @@ async function refreshDailyCommunity(saveScore = false) {
       const submissionData = await submission.json();
       if (!submission.ok) throw new Error(submissionData.error || 'Could not submit today’s score.');
       scoreSaved = true;
+      queueLeaderboardNamePrompt('daily', submissionData.profile);
     }
     const query = new URLSearchParams({ day, participant: participantId });
     const response = await fetch(`/api/daily-scores?${query}`, { cache: 'no-store' });
@@ -284,7 +289,7 @@ async function refreshEndlessLeaderboard(force = false) {
     void submitEndlessScore(endlessBest).finally(() => { endlessScoreSyncing = false; });
   }
 }
-async function submitEndlessScore(score) {
+async function submitEndlessScore(score, promptForName = false) {
   if (!Number.isSafeInteger(score) || score < 1) return;
   const today = dailyChallenge?.day || new Date().toISOString().slice(0, 10);
   const participantId = dailyParticipantId(today);
@@ -297,6 +302,7 @@ async function submitEndlessScore(score) {
     if (!response.ok) throw new Error(data.error || 'Could not save your Endless score.');
     endlessBest = Math.max(endlessBest, Number(data.bestScore) || 0);
     localStorage.setItem('speedle-endless-best', String(endlessBest));
+    if (promptForName) queueLeaderboardNamePrompt('endless', data.profile);
     await refreshEndlessLeaderboard(true);
   } catch (error) {
     endlessLeaderboardError = error.message;
@@ -385,39 +391,38 @@ function updateDailyLeaderboardPanel() {
   updateDailyTabLeaderboardPanel();
 }
 async function saveDailyDisplayName(displayName) {
-  if (!dailyChallenge) return;
-  const name = Array.from(displayName).slice(0, 18).join('');
-  if (!name) { notify('Enter a display name.'); return; }
-  dailyProfileDraft = name;
+  dailyProfileDraft = displayName;
   dailyProfileError = '';
   dailyProfileNotice = '';
-  const participantId = dailyParticipantId(dailyChallenge.day);
   const button = document.querySelector('#daily-leaderboard-content #daily-profile-form button[type="submit"]');
   if (button) { button.disabled = true; button.textContent = 'Saving…'; }
   try {
-    const response = await fetch('/api/daily-profile', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ participantId, displayName: name }),
-    });
-    const data = await response.json();
-    if (!response.ok && response.status === 400) {
-      dailyProfileError = data.error || 'That name isn’t allowed. Please choose another.';
-      updateDailyLeaderboardPanel();
-      return;
-    }
-    if (!response.ok) throw new Error(data.error || 'Could not save your name.');
-    if (dailyLeaderboard) dailyLeaderboard.profile = data.profile;
-    dailyLeaderboardError = '';
-    dailyLeaderboardStatus = 'ready';
-    dailyProfileNotice = 'Name saved.';
-    updateDailyLeaderboardPanel();
-    await refreshDailyLeaderboard();
-    void refreshEndlessLeaderboard(true);
+    await saveLeaderboardName(displayName);
   } catch (error) {
-    dailyLeaderboardError = error.message;
-    dailyLeaderboardStatus = 'error';
+    dailyProfileError = error.message;
     updateDailyLeaderboardPanel();
   }
+}
+async function saveLeaderboardName(displayName) {
+  const name = displayName.trim();
+  if (!name) throw new Error('Enter a display name.');
+  const day = dailyChallenge?.day || new Date().toISOString().slice(0, 10);
+  const participantId = dailyParticipantId(day);
+  const response = await fetch('/api/daily-profile', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ participantId, displayName: name }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Could not save your name.');
+  leaderboardNameSaved = true;
+  pendingNamePrompts.clear();
+  dailyProfileDraft = data.profile.displayName;
+  dailyProfileError = '';
+  dailyProfileNotice = 'Name saved.';
+  if (dailyLeaderboard) dailyLeaderboard.profile = data.profile;
+  if (endlessLeaderboard) endlessLeaderboard.profile = data.profile;
+  void refreshDailyLeaderboard();
+  void refreshEndlessLeaderboard(true);
 }
 function dailyCommunityPanel() {
   const header = `<div class="daily-community-head"><div><div class="eyebrow">TODAY’S COMMUNITY</div><h3>How others scored</h3></div><button class="community-refresh" id="daily-community-refresh" type="button" aria-label="Refresh community scores" title="Refresh scores" ${dailyCommunityStatus === 'loading' ? 'disabled' : ''}>↻</button></div>`;
@@ -625,7 +630,7 @@ function chooseEndlessObject(index) {
     endlessRoundStatus = 'correct';
   } else {
     endlessRoundStatus = 'over';
-    void submitEndlessScore(endlessScore);
+    void submitEndlessScore(endlessScore, true);
   }
   endlessRevealActive = true;
   try { renderEndlessCard(); } finally { endlessRevealActive = false; }
@@ -781,6 +786,7 @@ function syncModeNav() {
     if (link.dataset.headerMode === activeMode) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
+  showLeaderboardNamePrompt();
 }
 function animateRunner(timestamp) {
   if (!runnerLastFrame) runnerLastFrame = timestamp;
@@ -815,6 +821,61 @@ document.querySelector('#daily-leaderboard-open')?.addEventListener('click', () 
 dailyLeaderboardDialog?.querySelector('.daily-leaderboard-dialog-close')?.addEventListener('click', () => dailyLeaderboardDialog.close());
 dailyLeaderboardDialog?.addEventListener('click', event => {
   if (event.target === dailyLeaderboardDialog) dailyLeaderboardDialog.close();
+});
+const leaderboardNameDialog = document.querySelector('#leaderboard-name-dialog');
+const leaderboardNameInput = document.querySelector('#leaderboard-name');
+const leaderboardNameError = document.querySelector('#leaderboard-name-error');
+const leaderboardNameSave = document.querySelector('#leaderboard-name-save');
+const leaderboardNameSkip = document.querySelector('#leaderboard-name-skip');
+function queueLeaderboardNamePrompt(mode, profile) {
+  if (profile?.hasChosenName === false && !leaderboardNameSaved && !namePromptDismissed) {
+    pendingNamePrompts.add(mode);
+    showLeaderboardNamePrompt();
+  }
+}
+function showLeaderboardNamePrompt() {
+  if (!pendingNamePrompts.has(soloMode) || leaderboardNameSaved || namePromptDismissed
+      || state || roomCode || inviteRoomCode || location.hash === '#room-entry'
+      || document.querySelector('dialog[open]') || !leaderboardNameDialog) return;
+  leaderboardNameDialog.showModal();
+}
+function dismissLeaderboardNamePrompt() {
+  namePromptDismissed = true;
+  pendingNamePrompts.clear();
+  sessionStorage.setItem(namePromptDismissedKey, 'yes');
+  leaderboardNameDialog.close();
+}
+bookmarkHelp?.addEventListener('close', showLeaderboardNamePrompt);
+dailyLeaderboardDialog?.addEventListener('close', showLeaderboardNamePrompt);
+leaderboardNameSkip?.addEventListener('click', dismissLeaderboardNamePrompt);
+leaderboardNameDialog?.addEventListener('cancel', event => {
+  event.preventDefault();
+  if (!leaderboardNameSave.disabled) dismissLeaderboardNamePrompt();
+});
+leaderboardNameInput?.addEventListener('input', () => {
+  leaderboardNameError.textContent = '';
+  leaderboardNameInput.removeAttribute('aria-invalid');
+});
+leaderboardNameDialog?.querySelector('form').addEventListener('submit', async event => {
+  event.preventDefault();
+  leaderboardNameSave.disabled = true;
+  leaderboardNameSave.textContent = 'Saving…';
+  leaderboardNameSkip.disabled = true;
+  leaderboardNameInput.readOnly = true;
+  leaderboardNameError.textContent = '';
+  try {
+    await saveLeaderboardName(leaderboardNameInput.value);
+    leaderboardNameDialog.close();
+  } catch (error) {
+    leaderboardNameInput.setAttribute('aria-invalid', 'true');
+    leaderboardNameError.textContent = error.message;
+    leaderboardNameInput.focus();
+  } finally {
+    leaderboardNameSave.disabled = false;
+    leaderboardNameSave.textContent = 'Save name';
+    leaderboardNameSkip.disabled = false;
+    leaderboardNameInput.readOnly = false;
+  }
 });
 localStorage.removeItem('speedle-daily-spread-bookmark');
 function decodeWikiText(value) {

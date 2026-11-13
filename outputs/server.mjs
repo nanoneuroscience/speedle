@@ -115,13 +115,16 @@ function containsBlockedName(value) {
   return blockedNameFragments.some(term => compact.includes(term)) || blockedNameWords.some(term => words.includes(term));
 }
 function defaultProfile(id) {
-  return { displayName: `Speedster ${id.replaceAll('-', '').slice(0, 4).toUpperCase()}`, currentStreak: 0, bestStreak: 0, lastPlayedDay: null };
+  return { displayName: `Speedster ${id.replaceAll('-', '').slice(0, 4).toUpperCase()}`, hasChosenName: false, currentStreak: 0, bestStreak: 0, lastPlayedDay: null };
 }
 function cleanDisplayName(value) {
   return Array.from(String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim()).slice(0, 18).join('');
 }
-function publicProfile(profile, day = new Date().toISOString().slice(0, 10)) {
-  return { displayName: containsBlockedName(profile.displayName) ? 'Speedster' : profile.displayName, currentStreak: currentStreakForDay(profile, day), bestStreak: profile.bestStreak };
+function publicProfile(profile, day, participantId) {
+  const name = cleanDisplayName(profile.displayName);
+  const validName = typeof profile.displayName === 'string' && name.length > 0 && name === profile.displayName && !containsBlockedName(name);
+  const hasChosenName = validName && (profile.hasChosenName ?? (participantId && name !== defaultProfile(participantId).displayName)) === true;
+  return { displayName: validName ? name : 'Speedster', hasChosenName, currentStreak: currentStreakForDay(profile, day), bestStreak: profile.bestStreak };
 }
 function updateProfileStreak(profile, day) {
   if (profile.lastPlayedDay === day) return profile;
@@ -247,7 +250,7 @@ const server = http.createServer(async (req, res) => {
         const myAccuracy = dailyScoreStore.participants[key] ?? null;
         return {
           day,
-          profile: publicProfile(dailyScoreStore.profiles[key], day),
+          profile: publicProfile(dailyScoreStore.profiles[key], day, participantId),
           entries: ranked.slice(0, 10).map((row, index) => ({ rank: index + 1, displayName: publicProfile(row.profile, day).displayName, accuracy: row.accuracy, currentStreak: currentStreakForDay(row.profile, day) })),
           myRank,
           myAccuracy,
@@ -279,7 +282,7 @@ const server = http.createServer(async (req, res) => {
           .sort((a, b) => b.bestScore - a.bestScore || a.profile.displayName.localeCompare(b.profile.displayName));
         const myRank = validScores.findIndex(row => row.hash === key) + 1 || null;
         return {
-          profile: publicProfile(dailyScoreStore.profiles[key], day),
+          profile: publicProfile(dailyScoreStore.profiles[key], day, participantId),
           entries: validScores.slice(0, 10).map((row, index) => ({ rank: index + 1, displayName: publicProfile(row.profile, day).displayName, bestScore: row.bestScore })),
           myRank,
           myBestScore: dailyScoreStore.endlessScores?.[key] || 0,
@@ -306,14 +309,15 @@ const server = http.createServer(async (req, res) => {
       const key = profileHash(participantId);
       const previousBest = Number.isSafeInteger(store.endlessScores?.[key]) ? store.endlessScores[key] : 0;
       const profiles = store.profiles[key] ? store.profiles : { ...store.profiles, [key]: defaultProfile(participantId) };
-      if (score <= previousBest && profiles === store.profiles) return { saved: true, bestScore: previousBest };
+      const result = { saved: true, bestScore: Math.max(previousBest, score), profile: publicProfile(profiles[key], day, participantId) };
+      if (score <= previousBest && profiles === store.profiles) return result;
       dailyScoreStore = {
         ...store,
         profiles,
         endlessScores: score > previousBest ? { ...(store.endlessScores || {}), [key]: score } : (store.endlessScores || {}),
       };
       try { await persistDailyScoreStore(); } catch (error) { dailyScoreStore = store; throw error; }
-      return { saved: true, bestScore: Math.max(previousBest, score) };
+      return result;
     });
     dailyScoreWrites = operation.catch(() => {});
     try { return send(res, 200, await operation); }
@@ -335,10 +339,10 @@ const server = http.createServer(async (req, res) => {
     const operation = dailyScoreWrites.then(async () => {
       const store = await loadDailyScoreStore(day, dailyQuestionFor(day).id);
       const key = profileHash(participantId);
-      const profile = { ...(store.profiles[key] || defaultProfile(participantId)), displayName };
+      const profile = { ...(store.profiles[key] || defaultProfile(participantId)), displayName, hasChosenName: true };
       dailyScoreStore = { ...store, profiles: { ...store.profiles, [key]: profile } };
       try { await persistDailyScoreStore(); } catch (error) { dailyScoreStore = store; throw error; }
-      return publicProfile(profile, day);
+      return publicProfile(profile, day, participantId);
     });
     dailyScoreWrites = operation.catch(() => {});
     try { return send(res, 200, { profile: await operation }); }
@@ -390,14 +394,14 @@ const server = http.createServer(async (req, res) => {
       const key = hash;
       const profile = { ...(store.profiles[key] || defaultProfile(participantId)) };
       updateProfileStreak(profile, day);
-      if (Object.hasOwn(store.participants, hash) && store.profiles[key]?.lastPlayedDay === day && !Object.hasOwn(store.participants, legacyHash)) return;
+      if (Object.hasOwn(store.participants, hash) && store.profiles[key]?.lastPlayedDay === day && !Object.hasOwn(store.participants, legacyHash)) return publicProfile(profile, day, participantId);
       dailyScoreStore = { ...store, participants, profiles: { ...store.profiles, [key]: profile } };
       try { await persistDailyScoreStore(); } catch (error) { dailyScoreStore = store; throw error; }
+      return publicProfile(profile, day, participantId);
     });
     dailyScoreWrites = operation.catch(() => {});
     try {
-      await operation;
-      return send(res, 200, { saved: true });
+      return send(res, 200, { saved: true, profile: await operation });
     } catch (error) {
       console.error('Could not save daily score:', error.message);
       return send(res, 503, { error: 'Your score could not be added right now.' });
